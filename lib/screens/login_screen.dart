@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import 'home_screen.dart';
 
 /// Login screen for the Attention app.
 ///
@@ -48,15 +49,10 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = false);
 
     if (result['success'] == true) {
-      // TODO: Navigate to the home screen once it exists.
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text('Inicio de sesión exitoso'),
-            backgroundColor: Colors.green,
-          ),
-        );
+      // Clients-only home; role validation happened in AuthService.
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+      );
     } else {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()

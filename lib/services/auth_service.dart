@@ -4,22 +4,23 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import 'api_config.dart';
 import 'secure_storage_service.dart';
+
+/// Role name the backend assigns to clients (Rol.nombre_rol == "C").
+///
+/// The mobile app is clients-only: any other role (ASU/GS/V/D) must be
+/// rejected before a token is ever persisted.
+const String kClientRole = 'C';
 
 /// Service that talks to the Attention backend authentication endpoints.
 class AuthService {
   AuthService._();
 
-  /// Base URL of the API.
-  ///
-  /// `10.0.2.2` is the host machine's loopback interface (127.0.0.1) as
-  /// seen from inside the Android emulator. Retarget by changing only this
-  /// constant:
-  /// - iOS Simulator: http://127.0.0.1:8000/api/v1
-  /// - Physical device: use the host machine's LAN IP (e.g. http://192.168.1.50:8000/api/v1)
-  static const String baseUrl = 'http://10.0.2.2:8000/api/v1';
-
   /// Attempts to log in with [email] and [password].
+  ///
+  /// Clients-only app: a successful login whose role is not `C` is turned
+  /// into a failure — the token is NOT persisted for staff accounts.
   ///
   /// Never throws. Always returns a map of one of these shapes:
   /// - `{'success': true, 'data': Map<String, dynamic>}` on a successful login
@@ -30,12 +31,15 @@ class AuthService {
     String email,
     String password,
   ) async {
+    final String baseUrl = await ApiConfig.resolveBaseUrl();
+
     try {
       final response = await http
           .post(
             Uri.parse('$baseUrl/auth/login'),
             headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'email': email, 'password': password}),
+            // Backend contract (LoginRequest): field names in Spanish.
+            body: jsonEncode({'correo': email, 'password': password}),
           )
           .timeout(const Duration(seconds: 15));
 
@@ -70,7 +74,8 @@ class AuthService {
     }
   }
 
-  /// Parses a successful (200/201) response body and persists the token.
+  /// Parses a successful (200/201) response body, enforces the clients-only
+  /// policy and persists the token + user session.
   static Future<Map<String, dynamic>> _handleSuccess(String body) async {
     if (body.trim().isEmpty) {
       return _noToken();
@@ -92,8 +97,54 @@ class AuthService {
       return _noToken();
     }
 
+    // Clients-only policy: staff roles are rejected before persisting
+    // anything. The response shape is {status, data: {access_token, user}}.
+    final dynamic data = decodedBody['data'];
+    if (data is! Map<String, dynamic>) {
+      return _noToken();
+    }
+    final String? nombreRol = _extractRoleName(data);
+    if (nombreRol == null) {
+      return _invalidResponse();
+    }
+    if (nombreRol != kClientRole) {
+      return {
+        'success': false,
+        'message': 'Esta aplicación es exclusiva para clientes. '
+            'Ingresa desde la plataforma web.',
+      };
+    }
+
+    // Persist token + lightweight session before reporting success.
+    final dynamic user = data['user'];
+    final String nombre = user is Map<String, dynamic>
+        ? (user['nombre'] as String? ?? '')
+        : '';
+    final String correo = user is Map<String, dynamic>
+        ? (user['correo'] as String? ?? '')
+        : '';
+
     await SecureStorageService.saveToken(token);
+    await SecureStorageService.saveUserSession(
+      nombre: nombre,
+      correo: correo,
+      nombreRol: nombreRol,
+    );
+
     return {'success': true, 'data': decodedBody};
+  }
+
+  /// Extracts `data.user.rol.nombre_rol` from the login payload.
+  static String? _extractRoleName(Map<String, dynamic> data) {
+    final dynamic user = data['user'];
+    if (user is! Map<String, dynamic>) return null;
+
+    final dynamic rol = user['rol'];
+    if (rol is! Map<String, dynamic>) return null;
+
+    final dynamic nombreRol = rol['nombre_rol'];
+    if (nombreRol is String && nombreRol.isNotEmpty) return nombreRol;
+    return null;
   }
 
   /// Searches the payload for an access token under the known keys,
