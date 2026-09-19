@@ -14,15 +14,22 @@ import 'package:http/http.dart' as http;
 class ApiConfig {
   ApiConfig._();
 
+  /// URL base por defecto de la API.
+  /// Soporta sobreescritura mediante variable de entorno en tiempo de compilación:
+  /// `flutter run --dart-define=API_BASE_URL=http://...`
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://192.168.0.2:8000/api/v1',
+  );
+
   /// Candidate base URLs, in probe order:
-  /// 1. Android emulator host loopback (10.0.2.2).
-  /// 2. Localhost via adb reverse (physical device).
-  /// 3. Windows host LAN IP (physical device on same Wi-Fi, when the
-  ///    firewall allows inbound :8000).
+  /// 1. Localhost via adb reverse (dispositivo físico USB: máxima velocidad y sin bloqueo de firewall).
+  /// 2. Windows host LAN IP (dispositivo físico por Wi-Fi en 192.168.0.2).
+  /// 3. Android emulator host loopback (10.0.2.2).
   static const List<String> candidateBaseUrls = [
-    'http://10.0.2.2:8000/api/v1',
     'http://localhost:8000/api/v1',
-    'http://192.168.0.2:8000/api/v1',
+    baseUrl,
+    'http://10.0.2.2:8000/api/v1',
   ];
 
   static const Duration _probeTimeout = Duration(milliseconds: 1200);

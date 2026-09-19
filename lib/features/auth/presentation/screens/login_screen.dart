@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../services/auth_service.dart';
-import 'home_screen.dart';
+import '../../../catalog/presentation/screens/home_screen.dart';
+import '../../data/auth_service.dart';
+import 'register_screen.dart';
 
 /// Login screen for the Attention app.
 ///
@@ -173,6 +174,26 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Text('Iniciar Sesión'),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      const Text('¿No tienes una cuenta?'),
+                      TextButton(
+                        onPressed: _isLoading
+                            ? null
+                            : () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const RegisterScreen(),
+                                  ),
+                                );
+                              },
+                        child: const Text('Regístrate aquí'),
+                      ),
+                    ],
                   ),
                 ],
               ),

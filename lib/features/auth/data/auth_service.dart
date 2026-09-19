@@ -4,8 +4,8 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
-import 'api_config.dart';
-import 'secure_storage_service.dart';
+import '../../../core/config/api_config.dart';
+import '../../../core/storage/secure_storage_service.dart';
 
 /// Role name the backend assigns to clients (Rol.nombre_rol == "C").
 ///
@@ -72,6 +72,80 @@ class AuthService {
         'message': 'Ocurrió un error inesperado. Intenta nuevamente.',
       };
     }
+  }
+
+  /// Registers a new client account (CU1).
+  ///
+  /// Sends [nombre], optional [apellido], [email], and [password] to
+  /// `POST /usuarios` with `nombre_rol: 'C'` (the client role).
+  ///
+  /// Never throws. Always returns:
+  /// - `{'success': true, 'data': Map<String, dynamic>, 'message': String}`
+  /// - `{'success': false, 'message': String}` on failure.
+  static Future<Map<String, dynamic>> register({
+    required String nombre,
+    String? apellido,
+    required String email,
+    required String password,
+  }) async {
+    final String baseUrl = await ApiConfig.resolveBaseUrl();
+
+    try {
+      final payload = <String, dynamic>{
+        'nombre': nombre.trim(),
+        if (apellido != null && apellido.trim().isNotEmpty)
+          'apellido': apellido.trim(),
+        'correo': email.trim(),
+        'password': password,
+        'nombre_rol': kClientRole,
+        'estado': true,
+      };
+
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/usuarios'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final dynamic decoded = jsonDecode(response.body);
+        return {
+          'success': true,
+          'data': decoded is Map<String, dynamic> ? decoded : <String, dynamic>{},
+          'message': 'Cuenta creada exitosamente.',
+        };
+      }
+      return _handleHttpError(response.statusCode, response.body);
+    } on TimeoutException {
+      return {
+        'success': false,
+        'message': 'El servidor tardó demasiado en responder. Intenta nuevamente.',
+      };
+    } on SocketException {
+      return {
+        'success': false,
+        'message': 'No se pudo conectar con el servidor. Verifica tu conexión.',
+      };
+    } on http.ClientException {
+      return {
+        'success': false,
+        'message': 'No se pudo conectar con el servidor. Verifica tu conexión.',
+      };
+    } on FormatException {
+      return _invalidResponse();
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Ocurrió un error inesperado. Intenta nuevamente.',
+      };
+    }
+  }
+
+  /// Clears stored access token and user session (CU3).
+  static Future<void> logout() async {
+    await SecureStorageService.clearAll();
   }
 
   /// Parses a successful (200/201) response body, enforces the clients-only
@@ -181,6 +255,12 @@ class AuthService {
           if (value is String && value.isNotEmpty) {
             serverMessage = value;
             break;
+          } else if (value is List && value.isNotEmpty) {
+            final first = value.first;
+            if (first is Map && first.containsKey('msg')) {
+              serverMessage = first['msg'].toString();
+              break;
+            }
           }
         }
       }

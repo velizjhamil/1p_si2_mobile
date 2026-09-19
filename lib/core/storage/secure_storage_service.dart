@@ -20,6 +20,9 @@ class SecureStorageService {
   /// Singleton-ish platform storage backend.
   static final FlutterSecureStorage _storage = FlutterSecureStorage();
 
+  /// Direct storage accessor.
+  static FlutterSecureStorage get storage => _storage;
+
   /// Persists [token] securely so it survives app restarts.
   static Future<void> saveToken(String token) async {
     await _storage.write(key: _tokenKey, value: token);

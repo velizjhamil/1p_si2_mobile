@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'screens/home_screen.dart';
-import 'screens/login_screen.dart';
-import 'services/secure_storage_service.dart';
+import 'core/storage/secure_storage_service.dart';
+import 'features/auth/presentation/screens/login_screen.dart';
+import 'features/catalog/presentation/screens/home_screen.dart';
 
 void main() {
   runApp(const MyApp());

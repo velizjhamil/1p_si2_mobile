@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
-import 'api_config.dart';
+import '../../../core/config/api_config.dart';
 
 /// Lightweight product model for the client catalog.
 class Producto {
