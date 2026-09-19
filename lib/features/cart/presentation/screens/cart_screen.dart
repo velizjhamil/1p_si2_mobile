@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/cart_item.dart';
 import '../../logic/cart_service.dart';
-import '../widgets/checkout_modal.dart';
+import '../../../orders/presentation/screens/checkout_screen.dart';
 
 /// Shopping cart screen (CU15) displaying client selected items,
 /// quantity controls, shipping calculation, and checkout trigger.
@@ -10,13 +10,8 @@ class CartScreen extends StatelessWidget {
   const CartScreen({super.key});
 
   void _openCheckout(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => const CheckoutModal(),
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const CheckoutScreen()),
     );
   }
 

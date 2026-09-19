@@ -7,8 +7,10 @@ import '../../../branches/presentation/screens/sucursales_screen.dart';
 import '../../../cart/logic/cart_service.dart';
 import '../../../cart/presentation/screens/cart_screen.dart';
 import '../../../categories/presentation/screens/categorias_screen.dart';
+import '../../../orders/presentation/screens/mis_compras_screen.dart';
 import '../../../reservations/presentation/screens/reservas_screen.dart';
 import '../../../tallas/presentation/screens/tallas_screen.dart';
+import '../../../ar_tryon/presentation/screens/probador_virtual_screen.dart';
 import '../../data/productos_service.dart';
 import '../widgets/product_detail_sheet.dart';
 
@@ -233,6 +235,20 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _navigateToMisCompras() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const MisComprasScreen()),
+    );
+  }
+
+  void _navigateToProbadorVirtual([Producto? producto]) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProbadorVirtualScreen(prendaInicial: producto),
+      ),
+    );
+  }
+
   void _openProductDetail(Producto producto) {
     showModalBottomSheet<void>(
       context: context,
@@ -355,6 +371,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(width: 8),
                           _QuickActionChip(
+                            icon: Icons.receipt_long_rounded,
+                            label: 'Mis Compras (CU21)',
+                            isPrimary: true,
+                            onTap: _navigateToMisCompras,
+                          ),
+                          const SizedBox(width: 8),
+                          _QuickActionChip(
                             icon: Icons.bookmark_added_rounded,
                             label: 'Mis Reservas (CU14)',
                             isPrimary: true,
@@ -380,27 +403,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(width: 8),
                           _QuickActionChip(
-                            icon: Icons.view_in_ar_rounded,
-                            label: 'Probador AR (CU8)',
-                            onTap: () => _showComingSoonDialog(
-                              title: 'Probador Virtual AR',
-                              cu: 'CU8',
-                              description:
-                                  'Prueba ropa en tiempo real sobre tu modelo 3D o cámara utilizando Realidad Aumentada.',
-                              icon: Icons.view_in_ar_rounded,
-                            ),
+                            icon: Icons.auto_awesome_rounded,
+                            label: 'Probador Virtual IA (CU25)',
+                            isPrimary: true,
+                            onTap: _navigateToProbadorVirtual,
                           ),
                           const SizedBox(width: 8),
                           _QuickActionChip(
-                            icon: Icons.auto_awesome_rounded,
-                            label: 'Asistente IA (CU25)',
-                            onTap: () => _showComingSoonDialog(
-                              title: 'Asistente de Moda IA',
-                              cu: 'CU25',
-                              description:
-                                  'Recomendador inteligente de outfits y combinaciones basado en tu estilo y ocasión.',
-                              icon: Icons.auto_awesome_rounded,
-                            ),
+                            icon: Icons.view_in_ar_rounded,
+                            label: 'Probador AR (CU8)',
+                            onTap: _navigateToProbadorVirtual,
                           ),
                         ],
                       ),
@@ -499,15 +511,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showComingSoonDialog(
-          title: 'Probador Virtual AR',
-          cu: 'CU8',
-          description:
-              'Visualiza prendas en tiempo real sobre tu imagen con Realidad Aumentada.',
-          icon: Icons.face_retouching_natural_outlined,
+        onPressed: _navigateToProbadorVirtual,
+        backgroundColor: Colors.purple.shade700,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.auto_awesome_rounded),
+        label: const Text(
+          'Probador IA',
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        icon: const Icon(Icons.face_retouching_natural_outlined),
-        label: const Text('Probador AR'),
       ),
     );
   }
@@ -621,6 +632,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 ListTile(
                   leading: Icon(
+                    Icons.receipt_long_rounded,
+                    color: colorScheme.primary,
+                  ),
+                  title: const Text(
+                    'Mis Compras & Pedidos',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text('CU21/CU13 • Historial y comprobantes'),
+                  trailing: _buildActiveBadge(),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _navigateToMisCompras();
+                  },
+                ),
+                ListTile(
+                  leading: Icon(
                     Icons.bookmark_added_rounded,
                     color: colorScheme.primary,
                   ),
@@ -688,23 +715,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 // SECTION 2: INNOVACIÓN E INTELIGENCIA ARTIFICIAL
                 _buildSectionHeader('INNOVACIÓN & IA'),
-                _buildPlaceholderTile(
-                  title: 'Probador Virtual AR',
-                  cu: 'CU8',
-                  subtitle: 'Pruébate ropa en 3D con Realidad Aumentada',
-                  icon: Icons.view_in_ar_rounded,
-                  badgeLabel: 'Próximamente AR',
-                  description:
-                      'Experimenta el probador virtual con superposición de prendas 3D sobre tu cuerpo mediante la cámara del móvil.',
-                ),
-                _buildPlaceholderTile(
-                  title: 'Asistente de Moda IA',
-                  cu: 'CU25',
-                  subtitle: 'Recomendaciones personalizadas de estilo',
-                  icon: Icons.auto_awesome_rounded,
-                  badgeLabel: 'Próximamente IA',
-                  description:
-                      'Interactúa con un modelo de Inteligencia Artificial para recibir sugerencias de outfits y combinaciones ideales según tu tipo de evento.',
+                ListTile(
+                  leading: Icon(
+                    Icons.auto_awesome_rounded,
+                    color: Colors.purple.shade700,
+                  ),
+                  title: const Text(
+                    'Probador Virtual con IA',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text('CU25/CU8 • Prueba virtual, talla y complexión'),
+                  trailing: _buildActiveBadge(),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _navigateToProbadorVirtual();
+                  },
                 ),
 
                 const Divider(height: 24),

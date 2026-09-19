@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../ar_tryon/presentation/screens/probador_virtual_screen.dart';
 import '../../../cart/logic/cart_service.dart';
 import '../../../cart/presentation/screens/cart_screen.dart';
 import '../../../reservations/presentation/widgets/crear_reserva_dialog.dart';
@@ -237,7 +238,33 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 ),
               ],
             ),
-            const SizedBox(height: 18),
+            // Try in Virtual Fitting Room Button
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ProbadorVirtualScreen(
+                      prendaInicial: widget.producto,
+                      tallaInicial: _tallaSeleccionada,
+                      colorInicial: _colorSeleccionado,
+                    ),
+                  ),
+                );
+              },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.purple.shade700,
+                side: BorderSide(color: Colors.purple.shade300),
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.auto_awesome_rounded),
+              label: const Text(
+                'Probar en Probador Virtual IA (CU25)',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 12),
 
             // Action Buttons
             Row(
