@@ -47,57 +47,75 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isLoading = true);
 
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
+    try {
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
 
-    final result = await AuthService.register(
-      nombre: _nombreController.text.trim(),
-      apellido: _apellidoController.text.trim().isEmpty
-          ? null
-          : _apellidoController.text.trim(),
-      email: email,
-      password: password,
-    );
-
-    if (!mounted) return;
-
-    if (result['success'] == true) {
-      // Automatic login after successful registration for a frictionless client UX.
-      final loginResult = await AuthService.login(email, password);
+      final result = await AuthService.register(
+        nombre: _nombreController.text.trim(),
+        apellido: _apellidoController.text.trim().isEmpty
+            ? null
+            : _apellidoController.text.trim(),
+        email: email,
+        password: password,
+      );
 
       if (!mounted) return;
 
-      setState(() => _isLoading = false);
+      if (result['success'] == true) {
+        // Automatic login after successful registration for a frictionless client UX.
+        final loginResult = await AuthService.login(email, password);
 
-      if (loginResult['success'] == true) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-          (route) => false,
-        );
+        if (!mounted) return;
+
+        if (loginResult['success'] == true) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+            (route) => false,
+          );
+        } else {
+          // Registration was created but auto-login had an issue; take to LoginScreen.
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(
+              const SnackBar(
+                content: Text('¡Cuenta creada exitosamente! Inicia sesión.'),
+                backgroundColor: Colors.green,
+                behavior: SnackBarBehavior.floating,
+                duration: Duration(seconds: 2),
+              ),
+            );
+        }
       } else {
-        // Registration was created but auto-login had an issue; take to LoginScreen.
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('¡Cuenta creada exitosamente! Inicia sesión.'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(result['message'] as String),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+            ),
+          );
       }
-    } else {
-      setState(() => _isLoading = false);
-
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(result['message'] as String),
-            backgroundColor: Colors.redAccent,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              content: Text('Error inesperado al registrar cuenta: $e'),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

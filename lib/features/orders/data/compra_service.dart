@@ -22,12 +22,12 @@ class VentaItemModel {
   });
 
   factory VentaItemModel.fromJson(Map<String, dynamic> json) => VentaItemModel(
-        idDetalle: json['id_detalle'] as int? ?? 0,
-        productoId: json['producto_id'] as int? ?? 0,
+        idDetalle: (json['id_detalle'] as num?)?.toInt() ?? 0,
+        productoId: (json['producto_id'] as num?)?.toInt() ?? 0,
         nombre: json['nombre'] as String? ?? 'Prenda',
         talla: json['talla'] as String?,
         color: json['color'] as String?,
-        cantidad: json['cantidad'] as int? ?? 1,
+        cantidad: (json['cantidad'] as num?)?.toInt() ?? 1,
         precioUnitario: (json['precio_unitario'] as num?)?.toDouble() ?? 0.0,
         subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0.0,
       );
@@ -109,7 +109,7 @@ class VentaModel {
         : null;
 
     return VentaModel(
-      idVenta: json['id_venta'] as int? ?? 0,
+      idVenta: (json['id_venta'] as num?)?.toInt() ?? 0,
       codigo: json['codigo'] as String? ?? 'ATT-000000',
       fechaVenta: fecha,
       total: (json['total'] as num?)?.toDouble() ?? 0.0,
@@ -149,50 +149,51 @@ class CompraService {
     required String ciudad,
     String? referencia,
   }) async {
-    final String baseUrl = await ApiConfig.resolveBaseUrl();
-    final String? token = await SecureStorageService.getToken();
-
-    if (token == null || token.isEmpty) {
-      return {
-        'success': false,
-        'message': 'Debes iniciar sesión con tu cuenta de cliente.',
-      };
-    }
-
-    final payload = {
-      'items': items
-          .map((i) => {
-                'producto_id': i.idProducto,
-                'cantidad': i.cantidad,
-                'talla': i.talla,
-                'color': i.color,
-              })
-          .toList(),
-      'metodo_pago': metodoPago,
-      'datos_entrega': {
-        'nombre_cliente': nombreCliente,
-        'correo': correo,
-        'telefono': telefono,
-        'direccion': direccion,
-        'ciudad': ciudad,
-        'referencia': referencia ?? '',
-      },
-      'tipo_venta': 'ONLINE',
-    };
-
     try {
+      final String baseUrl = await ApiConfig.resolveBaseUrl();
+      final String? token = await SecureStorageService.getToken();
+
+      if (token == null || token.isEmpty) {
+        return {
+          'success': false,
+          'message': 'Debes iniciar sesión con tu cuenta de cliente.',
+        };
+      }
+
+      final payload = {
+        'items': items
+            .map((i) => {
+                  'producto_id': i.idProducto,
+                  'cantidad': i.cantidad,
+                  'talla': i.talla,
+                  'color': i.color,
+                })
+            .toList(),
+        'metodo_pago': metodoPago,
+        'datos_entrega': {
+          'nombre_cliente': nombreCliente,
+          'correo': correo,
+          'telefono': telefono,
+          'direccion': direccion,
+          'ciudad': ciudad,
+          'referencia': referencia ?? '',
+        },
+        'tipo_venta': 'ONLINE',
+      };
+
       final response = await http
           .post(
             Uri.parse('$baseUrl/ventas/checkout'),
             headers: {
               'Content-Type': 'application/json',
+              'Accept': 'application/json',
               'Authorization': 'Bearer $token',
             },
             body: jsonEncode(payload),
           )
           .timeout(const Duration(seconds: 20));
 
-      final dynamic decoded = jsonDecode(response.body);
+      final dynamic decoded = jsonDecode(utf8.decode(response.bodyBytes));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = decoded is Map<String, dynamic> ? decoded['data'] : null;
@@ -201,7 +202,8 @@ class CompraService {
         return {
           'success': true,
           'venta': venta,
-          'message': decoded['message'] as String? ?? 'Compra procesada exitosamente.',
+          'message': (decoded is Map<String, dynamic> ? decoded['message'] : null) as String? ??
+              'Compra procesada exitosamente.',
         };
       }
 
@@ -223,33 +225,50 @@ class CompraService {
         'success': false,
         'message': 'El servidor tardó demasiado en responder al checkout.',
       };
-    } catch (e) {
+    } on http.ClientException {
       return {
         'success': false,
-        'message': 'Error inesperado durante la compra: $e',
+        'message': 'Error de comunicación con el servidor. Verifica tu conexión.',
+      };
+    } on FormatException {
+      return {
+        'success': false,
+        'message': 'Respuesta no válida del servidor durante el checkout.',
+      };
+    } on TypeError {
+      return {
+        'success': false,
+        'message': 'Error al procesar los datos de la compra efectuada.',
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'Error inesperado durante la compra. Intenta nuevamente.',
       };
     }
   }
 
   /// Lists the client's past purchases (CU13).
   static Future<Map<String, dynamic>> listarMisCompras() async {
-    final String baseUrl = await ApiConfig.resolveBaseUrl();
-    final String? token = await SecureStorageService.getToken();
-
-    if (token == null || token.isEmpty) {
-      return {
-        'success': false,
-        'message': 'Debes iniciar sesión para consultar tus compras.',
-      };
-    }
-
-    final uri = Uri.parse('$baseUrl/ventas?limit=50');
-
     try {
+      final String baseUrl = await ApiConfig.resolveBaseUrl();
+      final String? token = await SecureStorageService.getToken();
+
+      if (token == null || token.isEmpty) {
+        return {
+          'success': false,
+          'message': 'Debes iniciar sesión para consultar tus compras.',
+          'compras': <VentaModel>[],
+        };
+      }
+
+      final uri = Uri.parse('$baseUrl/ventas?limit=50');
+
       final response = await http.get(
         uri,
         headers: {
           'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
         },
       ).timeout(const Duration(seconds: 15));
 
@@ -257,14 +276,16 @@ class CompraService {
         return {
           'success': false,
           'message': 'Error al consultar historial de compras (código ${response.statusCode})',
+          'compras': <VentaModel>[],
         };
       }
 
-      final dynamic decoded = jsonDecode(response.body);
+      final dynamic decoded = jsonDecode(utf8.decode(response.bodyBytes));
       if (decoded is! Map<String, dynamic> || decoded['data'] is! List) {
         return {
           'success': false,
           'message': 'Respuesta del servidor inválida.',
+          'compras': <VentaModel>[],
         };
       }
 
@@ -281,16 +302,37 @@ class CompraService {
       return {
         'success': false,
         'message': 'Sin conexión con el servidor.',
+        'compras': <VentaModel>[],
       };
     } on TimeoutException {
       return {
         'success': false,
         'message': 'El servidor tardó demasiado en responder.',
+        'compras': <VentaModel>[],
       };
-    } catch (e) {
+    } on http.ClientException {
       return {
         'success': false,
-        'message': 'Error al obtener historial de compras: $e',
+        'message': 'Error de comunicación con el servidor. Verifica tu conexión.',
+        'compras': <VentaModel>[],
+      };
+    } on FormatException {
+      return {
+        'success': false,
+        'message': 'Formato de respuesta del servidor no reconocido.',
+        'compras': <VentaModel>[],
+      };
+    } on TypeError {
+      return {
+        'success': false,
+        'message': 'Error al procesar el historial de compras.',
+        'compras': <VentaModel>[],
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'Error al obtener historial de compras.',
+        'compras': <VentaModel>[],
       };
     }
   }

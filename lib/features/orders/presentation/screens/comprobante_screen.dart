@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/compra_service.dart';
-import 'mis_compras_screen.dart';
+import 'historial_compras_screen.dart';
 
 /// Screen displaying the digital receipt / voucher after a successful purchase.
 class ComprobanteScreen extends StatelessWidget {
@@ -210,7 +210,7 @@ class ComprobanteScreen extends StatelessWidget {
             FilledButton.icon(
               onPressed: () {
                 Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const MisComprasScreen()),
+                  MaterialPageRoute(builder: (_) => const HistorialComprasScreen()),
                 );
               },
               style: FilledButton.styleFrom(

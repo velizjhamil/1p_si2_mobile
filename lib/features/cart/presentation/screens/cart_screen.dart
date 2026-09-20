@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../shared/widgets/empty_view.dart';
 import '../../data/cart_item.dart';
 import '../../logic/cart_service.dart';
 import '../../../orders/presentation/screens/checkout_screen.dart';
@@ -211,49 +212,12 @@ class CartScreen extends StatelessWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withValues(alpha: 0.3),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.shopping_bag_outlined,
-                size: 72,
-                color: colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Tu carrito está vacío',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Explora las prendas del catálogo y agrégalas para comprarlas o reservarlas.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: colorScheme.onSurface.withValues(alpha: 0.6),
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.storefront_rounded),
-              label: const Text('Explorar Prendas'),
-            ),
-          ],
-        ),
-      ),
+    return EmptyView(
+      icon: Icons.shopping_bag_outlined,
+      title: 'Tu carrito está vacío',
+      message: 'Explora las prendas del catálogo y agrégalas para comprarlas o reservarlas.',
+      actionLabel: 'Explorar Prendas',
+      onAction: () => Navigator.of(context).pop(),
     );
   }
 }

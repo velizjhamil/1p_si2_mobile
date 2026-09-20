@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/storage/secure_storage_service.dart';
+import '../../../../shared/widgets/empty_view.dart';
 import '../../../cart/logic/cart_service.dart';
 import '../../data/compra_service.dart';
 import 'comprobante_screen.dart';
@@ -64,12 +65,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     final cart = CartService.instance;
     if (cart.items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Tu carrito está vacío.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Tu carrito está vacío.'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
       return;
     }
 
@@ -78,38 +82,48 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _error = null;
     });
 
-    final result = await CompraService.procesarCheckout(
-      items: cart.items,
-      metodoPago: _metodoPago,
-      nombreCliente: _nombreController.text.trim(),
-      correo: _correoController.text.trim(),
-      telefono: _telefonoController.text.trim(),
-      direccion: _direccionController.text.trim(),
-      ciudad: _ciudadController.text.trim(),
-      referencia: _referenciaController.text.trim(),
-    );
-
-    if (!mounted) return;
-
-    setState(() => _procesando = false);
-
-    if (result['success'] == true && result['venta'] != null) {
-      final venta = result['venta'] as VentaModel;
-
-      // Clear the client cart after successful backend processing
-      cart.clear();
-
-      // Navigate to digital receipt / voucher screen
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => ComprobanteScreen(venta: venta),
-        ),
+    try {
+      final result = await CompraService.procesarCheckout(
+        items: cart.items,
+        metodoPago: _metodoPago,
+        nombreCliente: _nombreController.text.trim(),
+        correo: _correoController.text.trim(),
+        telefono: _telefonoController.text.trim(),
+        direccion: _direccionController.text.trim(),
+        ciudad: _ciudadController.text.trim(),
+        referencia: _referenciaController.text.trim(),
       );
-    } else {
-      setState(() {
-        _error = result['message'] as String? ??
-            'Ocurrió un error al procesar el pedido.';
-      });
+
+      if (!mounted) return;
+
+      if (result['success'] == true && result['venta'] != null) {
+        final venta = result['venta'] as VentaModel;
+
+        // Clear the client cart after successful backend processing
+        cart.clear();
+
+        // Navigate to digital receipt / voucher screen
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => ComprobanteScreen(venta: venta),
+          ),
+        );
+      } else {
+        setState(() {
+          _error = result['message'] as String? ??
+              'Ocurrió un error al procesar el pedido.';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Error inesperado al procesar checkout: $e';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _procesando = false);
+      }
     }
   }
 
@@ -118,6 +132,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final cart = CartService.instance;
+
+    if (cart.items.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Confirmar Compra (CU21)'),
+        ),
+        body: EmptyView(
+          icon: Icons.shopping_bag_outlined,
+          title: 'No hay prendas para comprar',
+          message: 'Tu carrito no contiene productos en este momento.',
+          actionLabel: 'Volver a la tienda',
+          onAction: () => Navigator.of(context).pop(),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(

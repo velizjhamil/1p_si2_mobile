@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../shared/widgets/empty_view.dart';
+import '../../../../shared/widgets/error_retry_view.dart';
+import '../../../../shared/widgets/loading_view.dart';
 import '../../data/reservas_service.dart';
 
 /// Screen displaying the client's garment reservations (CU14).
@@ -83,21 +86,27 @@ class _ReservasScreenState extends State<ReservasScreen> {
     if (!mounted) return;
 
     if (result['success'] == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Reserva cancelada correctamente.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Reserva cancelada correctamente.'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
       _cargar();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message'] as String? ?? 'No se pudo cancelar.'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(result['message'] as String? ?? 'No se pudo cancelar.'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
     }
   }
 
@@ -140,15 +149,28 @@ class _ReservasScreenState extends State<ReservasScreen> {
 
   Widget _buildBody(BuildContext context) {
     if (_cargando && _reservas.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const LoadingView(message: 'Cargando tus reservas de prendas...');
     }
 
     if (_error != null) {
-      return _buildErrorState(context);
+      return ErrorRetryView(
+        title: 'Error al consultar reservas',
+        message: _error!,
+        onRetry: _cargar,
+      );
     }
 
     if (_reservas.isEmpty) {
-      return _buildEmptyState(context);
+      return RefreshIndicator(
+        onRefresh: _cargar,
+        child: EmptyView(
+          icon: Icons.bookmark_border_rounded,
+          title: 'No tienes reservas en este estado',
+          message: 'Puedes apartar prendas desde el catálogo para probártelas en nuestras sucursales físicas.',
+          actionLabel: 'Explorar catálogo',
+          onAction: () => Navigator.of(context).popUntil((route) => route.isFirst),
+        ),
+      );
     }
 
     return RefreshIndicator(
@@ -164,67 +186,6 @@ class _ReservasScreenState extends State<ReservasScreen> {
             onCancel: r.estado == 'PENDIENTE' ? () => _cancelarReserva(r) : null,
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildErrorState(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Center(
-      child: ListView(
-        shrinkWrap: true,
-        padding: const EdgeInsets.all(32),
-        children: [
-          Icon(Icons.error_outline, size: 56, color: colorScheme.error),
-          const SizedBox(height: 16),
-          const Text(
-            'Error al cargar tus reservas',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: colorScheme.outline, fontSize: 13),
-          ),
-          const SizedBox(height: 20),
-          Center(
-            child: ElevatedButton.icon(
-              onPressed: _cargar,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.bookmark_border_rounded, size: 64, color: colorScheme.outline),
-            const SizedBox(height: 16),
-            const Text(
-              'No tienes reservas en este estado',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Puedes apartar prendas desde el catálogo para probártelas en nuestras sucursales físicas.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: colorScheme.outline, fontSize: 13),
-            ),
-          ],
-        ),
       ),
     );
   }

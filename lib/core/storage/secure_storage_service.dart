@@ -71,9 +71,23 @@ class SecureStorageService {
     return null;
   }
 
+  /// Key under which the user's preferred theme mode is persisted.
+  static const String _themeModeKey = 'app_theme_mode';
+
   /// Removes token AND session (used on logout or session expiry).
+  /// Note: theme preference is intentionally kept so user preference is respected.
   static Future<void> clearAll() async {
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _sessionKey);
+  }
+
+  /// Persists preferred theme mode ('light', 'dark', 'system').
+  static Future<void> saveThemeMode(String mode) async {
+    await _storage.write(key: _themeModeKey, value: mode);
+  }
+
+  /// Reads preferred theme mode, or returns null if not set.
+  static Future<String?> getThemeMode() async {
+    return _storage.read(key: _themeModeKey);
   }
 }

@@ -43,10 +43,12 @@ class AuthService {
           )
           .timeout(const Duration(seconds: 15));
 
+      final bodyDecoded = utf8.decode(response.bodyBytes);
+
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return await _handleSuccess(response.body);
+        return await _handleSuccess(bodyDecoded);
       }
-      return _handleHttpError(response.statusCode, response.body);
+      return _handleHttpError(response.statusCode, bodyDecoded);
     } on TimeoutException {
       return {
         'success': false,
@@ -104,20 +106,22 @@ class AuthService {
       final response = await http
           .post(
             Uri.parse('$baseUrl/usuarios'),
-            headers: {'Content-Type': 'application/json'},
+            headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
             body: jsonEncode(payload),
           )
           .timeout(const Duration(seconds: 15));
 
+      final bodyDecoded = utf8.decode(response.bodyBytes);
+
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final dynamic decoded = jsonDecode(response.body);
+        final dynamic decoded = jsonDecode(bodyDecoded);
         return {
           'success': true,
           'data': decoded is Map<String, dynamic> ? decoded : <String, dynamic>{},
           'message': 'Cuenta creada exitosamente.',
         };
       }
-      return _handleHttpError(response.statusCode, response.body);
+      return _handleHttpError(response.statusCode, bodyDecoded);
     } on TimeoutException {
       return {
         'success': false,

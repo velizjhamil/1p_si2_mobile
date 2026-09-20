@@ -25,11 +25,11 @@ class FotoUsuario {
     }
 
     return FotoUsuario(
-      idFoto: json['id_foto'] as int,
+      idFoto: (json['id_foto'] as num?)?.toInt() ?? 0,
       urlImagen: json['url_imagen'] as String? ?? '',
       complexion: json['complexion'] as String? ?? 'NO_INDICADA',
-      estaturaCm: json['estatura_cm'] as int?,
-      pesoKg: json['peso_kg'] as int?,
+      estaturaCm: (json['estatura_cm'] as num?)?.toInt(),
+      pesoKg: (json['peso_kg'] as num?)?.toInt(),
       fechaSubida: fecha,
     );
   }
@@ -181,10 +181,25 @@ class ProbadorVirtualService {
         'success': false,
         'message': 'Sin conexión al servidor del probador virtual.',
       };
-    } catch (e) {
+    } on http.ClientException {
       return {
         'success': false,
-        'message': 'Error inesperado: $e',
+        'message': 'Error de comunicación con el servidor. Verifica tu conexión.',
+      };
+    } on FormatException {
+      return {
+        'success': false,
+        'message': 'Respuesta no válida del motor de IA.',
+      };
+    } on TypeError {
+      return {
+        'success': false,
+        'message': 'Error al procesar la respuesta del análisis corporal.',
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'Ocurrió un error inesperado al procesar la fotografía.',
       };
     } finally {
       if (client == null) {
@@ -268,12 +283,27 @@ class ProbadorVirtualService {
     } on SocketException {
       return {
         'success': false,
-        'message': 'Sin conexión con el servidor.',
+        'message': 'Sin conexión con el servidor del probador virtual.',
       };
-    } catch (e) {
+    } on http.ClientException {
       return {
         'success': false,
-        'message': 'Error en simulación: $e',
+        'message': 'Error de comunicación con el servidor al simular.',
+      };
+    } on FormatException {
+      return {
+        'success': false,
+        'message': 'Formato no reconocido en el resultado de simulación.',
+      };
+    } on TypeError {
+      return {
+        'success': false,
+        'message': 'Error al procesar la simulación de la prenda.',
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'Ocurrió un error inesperado al realizar la simulación.',
       };
     } finally {
       if (client == null) {

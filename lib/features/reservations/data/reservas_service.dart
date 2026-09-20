@@ -18,10 +18,10 @@ class DetalleReservaItem {
 
   factory DetalleReservaItem.fromJson(Map<String, dynamic> json) =>
       DetalleReservaItem(
-        idDetalle: json['id_detalle'] as int? ?? 0,
-        idProducto: json['id_producto'] as int? ?? 0,
+        idDetalle: (json['id_detalle'] as num?)?.toInt() ?? 0,
+        idProducto: (json['id_producto'] as num?)?.toInt() ?? 0,
         nombre: json['nombre'] as String? ?? '',
-        cantidad: json['cantidad'] as int? ?? 1,
+        cantidad: (json['cantidad'] as num?)?.toInt() ?? 1,
         precioUnitario: (json['precio_unitario'] as num?)?.toDouble() ?? 0.0,
       );
 
@@ -62,7 +62,7 @@ class ReservaItem {
         : <DetalleReservaItem>[];
 
     return ReservaItem(
-      idReserva: json['id_reserva'] as int? ?? 0,
+      idReserva: (json['id_reserva'] as num?)?.toInt() ?? 0,
       fechaReserva: parseDate(json['fecha_reserva']),
       fechaExpiracion: parseDate(json['fecha_expiracion']),
       estado: json['estado'] as String? ?? 'PENDIENTE',
@@ -86,28 +86,30 @@ class ReservasService {
   ReservasService._();
 
   static Future<Map<String, dynamic>> listar({String? estado}) async {
-    final String baseUrl = await ApiConfig.resolveBaseUrl();
-    final String? token = await SecureStorageService.getToken();
-
-    if (token == null || token.isEmpty) {
-      return {
-        'success': false,
-        'message': 'Debes iniciar sesión para consultar tus reservas.',
-      };
-    }
-
-    final queryParams = <String, String>{'limit': '50'};
-    if (estado != null && estado.isNotEmpty && estado != 'TODAS') {
-      queryParams['estado'] = estado;
-    }
-
-    final uri = Uri.parse('$baseUrl/reservas').replace(queryParameters: queryParams);
-
     try {
+      final String baseUrl = await ApiConfig.resolveBaseUrl();
+      final String? token = await SecureStorageService.getToken();
+
+      if (token == null || token.isEmpty) {
+        return {
+          'success': false,
+          'message': 'Debes iniciar sesión para consultar tus reservas.',
+          'reservas': <ReservaItem>[],
+        };
+      }
+
+      final queryParams = <String, String>{'limit': '50'};
+      if (estado != null && estado.isNotEmpty && estado != 'TODAS') {
+        queryParams['estado'] = estado;
+      }
+
+      final uri = Uri.parse('$baseUrl/reservas').replace(queryParameters: queryParams);
+
       final response = await http.get(
         uri,
         headers: {
           'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
         },
       ).timeout(const Duration(seconds: 15));
 
@@ -115,14 +117,16 @@ class ReservasService {
         return {
           'success': false,
           'message': 'Error al consultar reservas (código ${response.statusCode})',
+          'reservas': <ReservaItem>[],
         };
       }
 
-      final dynamic decoded = jsonDecode(response.body);
+      final dynamic decoded = jsonDecode(utf8.decode(response.bodyBytes));
       if (decoded is! Map<String, dynamic> || decoded['data'] is! List) {
         return {
           'success': false,
           'message': 'Respuesta del servidor inválida.',
+          'reservas': <ReservaItem>[],
         };
       }
 
@@ -139,16 +143,37 @@ class ReservasService {
       return {
         'success': false,
         'message': 'Sin conexión con el servidor. Revisa tu conexión de red.',
+        'reservas': <ReservaItem>[],
       };
     } on TimeoutException {
       return {
         'success': false,
         'message': 'El servidor tardó demasiado en responder.',
+        'reservas': <ReservaItem>[],
       };
-    } catch (e) {
+    } on http.ClientException {
       return {
         'success': false,
-        'message': 'Error inesperado al obtener reservas: $e',
+        'message': 'Error de comunicación con el servidor. Verifica tu conexión.',
+        'reservas': <ReservaItem>[],
+      };
+    } on FormatException {
+      return {
+        'success': false,
+        'message': 'Formato de respuesta del servidor no reconocido.',
+        'reservas': <ReservaItem>[],
+      };
+    } on TypeError {
+      return {
+        'success': false,
+        'message': 'Error al procesar las reservas registradas.',
+        'reservas': <ReservaItem>[],
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'Ocurrió un error inesperado al obtener reservas.',
+        'reservas': <ReservaItem>[],
       };
     }
   }
@@ -158,25 +183,25 @@ class ReservasService {
     required DateTime fechaExpiracion,
     required List<Map<String, dynamic>> items,
   }) async {
-    final String baseUrl = await ApiConfig.resolveBaseUrl();
-    final String? token = await SecureStorageService.getToken();
-
-    if (token == null || token.isEmpty) {
-      return {
-        'success': false,
-        'message': 'Debes iniciar sesión para reservar prendas.',
-      };
-    }
-
-    final formattedDate =
-        "${fechaExpiracion.year.toString().padLeft(4, '0')}-${fechaExpiracion.month.toString().padLeft(2, '0')}-${fechaExpiracion.day.toString().padLeft(2, '0')}";
-
-    final payload = {
-      'fecha_expiracion': formattedDate,
-      'items': items,
-    };
-
     try {
+      final String baseUrl = await ApiConfig.resolveBaseUrl();
+      final String? token = await SecureStorageService.getToken();
+
+      if (token == null || token.isEmpty) {
+        return {
+          'success': false,
+          'message': 'Debes iniciar sesión para reservar prendas.',
+        };
+      }
+
+      final formattedDate =
+          "${fechaExpiracion.year.toString().padLeft(4, '0')}-${fechaExpiracion.month.toString().padLeft(2, '0')}-${fechaExpiracion.day.toString().padLeft(2, '0')}";
+
+      final payload = {
+        'fecha_expiracion': formattedDate,
+        'items': items,
+      };
+
       final response = await http
           .post(
             Uri.parse('$baseUrl/reservas'),
@@ -188,13 +213,14 @@ class ReservasService {
           )
           .timeout(const Duration(seconds: 15));
 
-      final dynamic decoded = jsonDecode(response.body);
+      final dynamic decoded = jsonDecode(utf8.decode(response.bodyBytes));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {
           'success': true,
-          'reserva': decoded['data'],
-          'message': decoded['message'] as String? ?? 'Reserva registrada con éxito.',
+          'reserva': decoded is Map<String, dynamic> ? decoded['data'] : null,
+          'message': (decoded is Map<String, dynamic> ? decoded['message'] : null) as String? ??
+              'Reserva registrada con éxito.',
         };
       }
 
@@ -209,17 +235,32 @@ class ReservasService {
     } on SocketException {
       return {
         'success': false,
-        'message': 'Sin conexión con el servidor.',
+        'message': 'Sin conexión con el servidor al registrar reserva.',
       };
     } on TimeoutException {
       return {
         'success': false,
         'message': 'El servidor tardó demasiado en responder.',
       };
-    } catch (e) {
+    } on http.ClientException {
       return {
         'success': false,
-        'message': 'Error inesperado al crear reserva: $e',
+        'message': 'Error de comunicación con el servidor. Verifica tu conexión.',
+      };
+    } on FormatException {
+      return {
+        'success': false,
+        'message': 'Respuesta no válida del servidor al reservar.',
+      };
+    } on TypeError {
+      return {
+        'success': false,
+        'message': 'Error de formato en la respuesta de la reserva.',
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'Ocurrió un error inesperado al crear la reserva.',
       };
     }
   }
@@ -229,17 +270,17 @@ class ReservasService {
     int idReserva, {
     String motivo = 'Cancelada por el cliente desde la app móvil.',
   }) async {
-    final String baseUrl = await ApiConfig.resolveBaseUrl();
-    final String? token = await SecureStorageService.getToken();
-
-    if (token == null || token.isEmpty) {
-      return {
-        'success': false,
-        'message': 'Sesión no válida.',
-      };
-    }
-
     try {
+      final String baseUrl = await ApiConfig.resolveBaseUrl();
+      final String? token = await SecureStorageService.getToken();
+
+      if (token == null || token.isEmpty) {
+        return {
+          'success': false,
+          'message': 'Sesión no válida.',
+        };
+      }
+
       final response = await http
           .patch(
             Uri.parse('$baseUrl/reservas/$idReserva/estado'),
@@ -254,27 +295,53 @@ class ReservasService {
           )
           .timeout(const Duration(seconds: 15));
 
-      final dynamic decoded = jsonDecode(response.body);
+      final dynamic decoded = jsonDecode(utf8.decode(response.bodyBytes));
 
       if (response.statusCode == 200) {
         return {
           'success': true,
-          'message': decoded['message'] as String? ?? 'Reserva cancelada correctamente.',
+          'message': (decoded is Map<String, dynamic> ? decoded['message'] : null) as String? ??
+              'Reserva cancelada correctamente.',
         };
       }
 
       final errorMsg = decoded is Map<String, dynamic>
-          ? (decoded['detail'] ?? 'No se pudo cancelar la reserva.')
+          ? (decoded['detail'] ?? decoded['message'] ?? 'No se pudo cancelar la reserva.')
           : 'Error del servidor.';
 
       return {
         'success': false,
         'message': errorMsg.toString(),
       };
-    } catch (e) {
+    } on SocketException {
       return {
         'success': false,
-        'message': 'Error al cancelar la reserva: $e',
+        'message': 'Sin conexión con el servidor al cancelar.',
+      };
+    } on TimeoutException {
+      return {
+        'success': false,
+        'message': 'Tiempo de espera agotado al cancelar la reserva.',
+      };
+    } on http.ClientException {
+      return {
+        'success': false,
+        'message': 'Error de comunicación con el servidor al cancelar.',
+      };
+    } on FormatException {
+      return {
+        'success': false,
+        'message': 'Respuesta del servidor inválida al cancelar.',
+      };
+    } on TypeError {
+      return {
+        'success': false,
+        'message': 'Error al procesar la cancelación.',
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'Error al cancelar la reserva. Intente nuevamente.',
       };
     }
   }

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../shared/widgets/empty_view.dart';
+import '../../../../shared/widgets/error_retry_view.dart';
+import '../../../../shared/widgets/loading_view.dart';
 import '../../data/tallas_service.dart';
 
 /// Screen displaying sizes (Tallas) and colors (Colores) for the client app (CU7 - Móvil).
@@ -126,7 +129,7 @@ class _TallasScreenState extends State<TallasScreen>
   // ---------------------------------------------------------------------------
   Widget _buildTallasTab(BuildContext context) {
     if (_cargandoTallas && _tallas.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const LoadingView(message: 'Cargando tallas disponibles...');
     }
 
     if (_errorTallas != null) {
@@ -337,7 +340,7 @@ class _TallasScreenState extends State<TallasScreen>
   // ---------------------------------------------------------------------------
   Widget _buildColoresTab(BuildContext context) {
     if (_cargandoColores && _colores.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const LoadingView(message: 'Cargando colores disponibles...');
     }
 
     if (_errorColores != null) {
@@ -373,65 +376,18 @@ class _TallasScreenState extends State<TallasScreen>
     required String message,
     required VoidCallback onRetry,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
-    return Center(
-      child: ListView(
-        shrinkWrap: true,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(32),
-        children: [
-          Icon(Icons.error_outline, size: 56, color: colorScheme.error),
-          const SizedBox(height: 16),
-          Text(
-            'Error al cargar la información.',
-            textAlign: TextAlign.center,
-            style: textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Center(
-            child: ElevatedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
-            ),
-          ),
-        ],
-      ),
+    return ErrorRetryView(
+      title: 'Error al consultar información',
+      message: message,
+      onRetry: onRetry,
     );
   }
 
   Widget _buildEmptyState({required IconData icon, required String message}) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Center(
-      child: ListView(
-        shrinkWrap: true,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(32),
-        children: [
-          Icon(
-            icon,
-            size: 56,
-            color: colorScheme.onSurface.withValues(alpha: 0.4),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 16),
-          ),
-        ],
-      ),
+    return EmptyView(
+      icon: icon,
+      title: 'Catálogo sin registros',
+      message: message,
     );
   }
 }

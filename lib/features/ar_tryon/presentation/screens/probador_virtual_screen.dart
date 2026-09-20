@@ -61,6 +61,7 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
   String _aiProgressMessage = 'Analizando silueta corporal con IA...';
   SimulacionProbadorResult? _resultadoSimulacion;
   String? _errorMessage;
+  bool _isAddingToCart = false;
 
   @override
   void initState() {
@@ -90,8 +91,9 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
     if (mounted) {
       setState(() {
         _cargandoCatalogo = false;
-        if (res['success'] == true && res['items'] is List<Producto>) {
-          _catalogo = res['items'] as List<Producto>;
+        final dynamic rawList = res['productos'] ?? res['items'];
+        if (res['success'] == true && rawList is List<Producto>) {
+          _catalogo = rawList;
           // Default selection if none passed
           if (_prendaSeleccionada == null && _catalogo.isNotEmpty) {
             _seleccionarPrenda(_catalogo.first);
@@ -153,12 +155,16 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('No se pudo capturar la imagen: $e'),
-            backgroundColor: Colors.red.shade700,
-          ),
-        );
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              content: Text('No se pudo capturar la imagen: $e'),
+              duration: const Duration(seconds: 2),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
       }
     }
   }
@@ -178,12 +184,15 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
       _errorMessage = null;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Foto de demostración cargada para simulación IA.'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Foto de demostración cargada para simulación IA.'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
   }
 
   void _seleccionarFotoPrevia(FotoUsuario foto) {
@@ -199,20 +208,28 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
   // --- Step 3: Run AI Virtual Try-On Simulation ---
   Future<void> _ejecutarSimulacionIA() async {
     if (_imageDataUrl == null && _fotoProcesada == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor toma una foto o selecciona una imagen primero.'),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Por favor toma una foto o selecciona una imagen primero.'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       return;
     }
 
     if (_prendaSeleccionada == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Selecciona una prenda del catálogo para probarte.'),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Selecciona una prenda del catálogo para probarte.'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       return;
     }
 
@@ -287,46 +304,76 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_errorMessage ?? 'Ocurrió un error en la simulación.'),
-          backgroundColor: Colors.red.shade800,
-        ),
-      );
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(_errorMessage ?? 'Ocurrió un error en la simulación.'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.red.shade800,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
     }
   }
 
   // --- Step 4 Post Actions: Cart & Reservation ---
-  void _agregarAlCarrito() {
-    if (_prendaSeleccionada == null) return;
+  Future<void> _agregarAlCarrito() async {
+    if (_prendaSeleccionada == null || _isAddingToCart) return;
 
-    final talla = _resultadoSimulacion?.tallaSeleccionada ?? _tallaSeleccionada;
-    final color = _resultadoSimulacion?.colorSeleccionado ?? _colorSeleccionado;
+    setState(() => _isAddingToCart = true);
 
-    CartService.instance.addItem(
-      idProducto: _prendaSeleccionada!.idProducto,
-      nombre: _prendaSeleccionada!.nombre,
-      precioUnitario: _prendaSeleccionada!.precioVenta,
-      cantidad: 1,
-      talla: talla,
-      color: color,
-      imagenUrl: _prendaSeleccionada!.imagenUrl,
-    );
+    try {
+      final talla = _resultadoSimulacion?.tallaSeleccionada ?? _tallaSeleccionada;
+      final color = _resultadoSimulacion?.colorSeleccionado ?? _colorSeleccionado;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('¡${_prendaSeleccionada!.nombre} agregada a tu carrito!'),
-        behavior: SnackBarBehavior.floating,
-        action: SnackBarAction(
-          label: 'Ver Carrito',
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const CartScreen()),
-            );
-          },
+      CartService.instance.addItem(
+        idProducto: _prendaSeleccionada!.idProducto,
+        nombre: _prendaSeleccionada!.nombre,
+        precioUnitario: _prendaSeleccionada!.precioVenta,
+        cantidad: 1,
+        talla: talla,
+        color: color,
+        imagenUrl: _prendaSeleccionada!.imagenUrl,
+      );
+
+      final messenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
+
+      messenger.clearSnackBars();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('¡${_prendaSeleccionada!.nombre} agregada a tu carrito!'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+          action: SnackBarAction(
+            label: 'Ver Carrito',
+            onPressed: () {
+              messenger.hideCurrentSnackBar();
+              navigator.push(
+                MaterialPageRoute(builder: (_) => const CartScreen()),
+              );
+            },
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.clearSnackBars();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Error al añadir al carrito: $e'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.red.shade800,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isAddingToCart = false);
+      }
+    }
   }
 
   void _abrirReserva() {
@@ -1410,15 +1457,24 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton.icon(
-                onPressed: _agregarAlCarrito,
+                onPressed: _isAddingToCart ? null : _agregarAlCarrito,
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                icon: const Icon(Icons.add_shopping_cart_rounded),
-                label: const Text(
-                  'Añadir al Carrito',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                icon: _isAddingToCart
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.add_shopping_cart_rounded),
+                label: Text(
+                  _isAddingToCart ? 'Añadiendo...' : 'Añadir al Carrito',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
             ),

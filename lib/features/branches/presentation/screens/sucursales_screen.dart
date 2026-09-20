@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../shared/widgets/empty_view.dart';
+import '../../../../shared/widgets/error_retry_view.dart';
+import '../../../../shared/widgets/loading_view.dart';
 import '../../data/sucursales_service.dart';
 
 /// Screen that lists the company branches (Sucursales) for the client app.
@@ -24,15 +27,10 @@ class _SucursalesScreenState extends State<SucursalesScreen> {
   @override
   void initState() {
     super.initState();
-    // Fire-and-forget; the spinner state already reflects the in-flight load.
     _cargar();
   }
 
   /// Fetches branches (and best-effort city enrichment) from the backend.
-  ///
-  /// Returns a Future so it can be awaited by [RefreshIndicator]. The
-  /// [_cargando] flag prevents overlapping calls when the user spam-taps
-  /// "Reintentar" while a request is in flight.
   Future<void> _cargar() async {
     if (_cargando) return;
     setState(() {
@@ -42,12 +40,7 @@ class _SucursalesScreenState extends State<SucursalesScreen> {
 
     final result = await SucursalesService.listar();
 
-    // Cities are only used for the screen title fallback / lookup. The
-    // branch payload already contains a nested city, so a cities failure
-    // must not blank the list.
     if (mounted && result['success'] == true) {
-      // Best-effort enrichment; ignored on failure (we already have city
-      // info inside each Sucursal from the main response).
       await SucursalesService.listarCiudades();
     }
 
@@ -75,64 +68,26 @@ class _SucursalesScreenState extends State<SucursalesScreen> {
   /// Resolves which of the three canonical async states to render.
   Widget _buildBody(BuildContext context) {
     if (_cargando && _sucursales.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const LoadingView(message: 'Cargando sucursales disponibles...');
     }
 
     if (_error != null) {
-      return _buildErrorState(context);
+      return ErrorRetryView(
+        title: 'No se pudieron cargar las sucursales',
+        message: _error!,
+        onRetry: _cargar,
+      );
     }
 
-    return _buildDataState(context);
-  }
-
-  /// Error view: icon + primary copy + backend message + retry button.
-  Widget _buildErrorState(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
-    return Center(
-      child: ListView(
-        shrinkWrap: true,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(32),
-        children: [
-          Icon(
-            Icons.error_outline,
-            size: 64,
-            color: colorScheme.error,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No se pudo cargar la lista de sucursales.',
-            textAlign: TextAlign.center,
-            style: textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Center(
-            child: ElevatedButton.icon(
-              onPressed: _cargar,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Data view: empty state or the populated list wrapped in
-  /// [RefreshIndicator] for pull-to-refresh.
-  Widget _buildDataState(BuildContext context) {
     if (_sucursales.isEmpty) {
-      return _buildEmptyState(context);
+      return RefreshIndicator(
+        onRefresh: _cargar,
+        child: const EmptyView(
+          icon: Icons.store_mall_directory_rounded,
+          title: 'No hay sucursales registradas',
+          message: 'En este momento no se encontraron puntos de atención disponibles.',
+        ),
+      );
     }
 
     return RefreshIndicator(
@@ -145,33 +100,6 @@ class _SucursalesScreenState extends State<SucursalesScreen> {
         itemBuilder: (context, index) {
           return _SucursalCard(sucursal: _sucursales[index]);
         },
-      ),
-    );
-  }
-
-  /// Empty state shown when the backend returns an empty list.
-  Widget _buildEmptyState(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
-    return Center(
-      child: ListView(
-        shrinkWrap: true,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(32),
-        children: [
-          Icon(
-            Icons.store_mall_directory_outlined,
-            size: 64,
-            color: colorScheme.onSurface.withValues(alpha: 0.4),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Aún no hay sucursales registradas.',
-            textAlign: TextAlign.center,
-            style: textTheme.bodyLarge,
-          ),
-        ],
       ),
     );
   }

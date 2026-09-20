@@ -5,11 +5,9 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../../../core/config/api_config.dart';
+import '../../../core/storage/secure_storage_service.dart';
 
 /// City (Ciudad) as returned by the public /ciudades endpoint.
-///
-/// Lightweight DTO used by the branches feature. Department may be null
-/// for cities that do not yet have an associated department.
 class Ciudad {
   const Ciudad({
     required this.id,
@@ -19,7 +17,7 @@ class Ciudad {
 
   /// Parses a Ciudad from a JSON object with a tolerant shape.
   factory Ciudad.fromJson(Map<String, dynamic> json) => Ciudad(
-        id: json['id'] as int? ?? 0,
+        id: (json['id'] as num?)?.toInt() ?? 0,
         nombre: json['nombre'] as String? ?? '',
         departamento: json['departamento'] as String?,
       );
@@ -44,9 +42,6 @@ class Sucursal {
   });
 
   /// Parses a Sucursal from a JSON object with a tolerant shape.
-  ///
-  /// Missing or malformed fields fall back to safe defaults instead of
-  /// throwing, so a single bad record does not break the whole list.
   factory Sucursal.fromJson(Map<String, dynamic> json) {
     final dynamic ciudadJson = json['ciudad'];
     final Ciudad ciudad = ciudadJson is Map<String, dynamic>
@@ -64,14 +59,14 @@ class Sucursal {
     }
 
     return Sucursal(
-      codigoSucursal: json['codigo_sucursal'] as int? ?? 0,
+      codigoSucursal: (json['codigo_sucursal'] as num?)?.toInt() ?? 0,
       nombre: json['nombre'] as String? ?? '',
       direccion: json['direccion'] as String?,
       telefono: json['telefono'] as String?,
       horarioAtencion: json['horario_atencion'] as String?,
       isActive: json['is_active'] as bool? ?? false,
       ciudad: ciudad,
-      empresaId: json['empresa_id'] as int? ?? 0,
+      empresaId: (json['empresa_id'] as num?)?.toInt() ?? 0,
       fechaActualizacion: fechaActualizacion,
     );
   }
@@ -88,17 +83,10 @@ class Sucursal {
 }
 
 /// Service that talks to the Attention backend branches and cities endpoints.
-///
-/// Both /sucursales and /ciudades are public read-only endpoints exposed
-/// without authentication, so no Authorization header is attached.
 class SucursalesService {
   SucursalesService._();
 
   /// Fetches the list of active branches.
-  ///
-  /// Never throws. Always returns:
-  /// - `{'success': true, 'sucursales': List<Sucursal>}` on success
-  /// - `{'success': false, 'message': String}` on any failure.
   static Future<Map<String, dynamic>> listar() async {
     return _getList<Sucursal>(
       path: 'sucursales',
@@ -108,13 +96,6 @@ class SucursalesService {
   }
 
   /// Fetches the list of cities available for branch lookup.
-  ///
-  /// The branches screen already embeds the city in each branch, so a
-  /// failure here is non-fatal for the main list.
-  ///
-  /// Never throws. Always returns:
-  /// - `{'success': true, 'ciudades': List<Ciudad>}` on success
-  /// - `{'success': false, 'message': String}` on any failure.
   static Future<Map<String, dynamic>> listarCiudades() async {
     return _getList<Ciudad>(
       path: 'ciudades',
@@ -123,32 +104,39 @@ class SucursalesService {
     );
   }
 
-  /// Shared GET helper that decodes the standard envelope and converts
-  /// each item via [fromJson]. Returns the same success/failure map shape
-  /// regardless of the item type, so both public endpoints stay
-  /// consistent with the rest of the codebase.
   static Future<Map<String, dynamic>> _getList<T>({
     required String path,
     required String itemsKey,
     required T Function(Map<String, dynamic>) fromJson,
   }) async {
-    final String baseUrl = await ApiConfig.resolveBaseUrl();
-
     try {
+      final String baseUrl = await ApiConfig.resolveBaseUrl();
+      final String? token = await SecureStorageService.getToken();
+
+      final headers = <String, String>{
+        'Accept': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
       final response = await http
-          .get(Uri.parse('$baseUrl/$path'))
+          .get(Uri.parse('$baseUrl/$path'), headers: headers)
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) {
         return {
           'success': false,
           'message': 'Error del servidor (código ${response.statusCode})',
+          itemsKey: <T>[],
         };
       }
 
-      final dynamic decoded = jsonDecode(response.body);
+      final dynamic decoded = jsonDecode(utf8.decode(response.bodyBytes));
       if (decoded is! Map<String, dynamic> || decoded['data'] is! List) {
-        return {'success': false, 'message': 'Respuesta del servidor inválida.'};
+        return {
+          'success': false,
+          'message': 'Respuesta del servidor inválida.',
+          itemsKey: <T>[],
+        };
       }
 
       final items = (decoded['data'] as List)
@@ -164,23 +152,37 @@ class SucursalesService {
       return {
         'success': false,
         'message': 'El servidor tardó demasiado en responder. Intenta nuevamente.',
+        itemsKey: <T>[],
       };
     } on SocketException {
       return {
         'success': false,
         'message': 'No se pudo conectar con el servidor. Verifica tu conexión.',
+        itemsKey: <T>[],
       };
     } on http.ClientException {
       return {
         'success': false,
         'message': 'No se pudo conectar con el servidor. Verifica tu conexión.',
+        itemsKey: <T>[],
       };
     } on FormatException {
-      return {'success': false, 'message': 'Respuesta del servidor inválida.'};
-    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Respuesta del servidor inválida.',
+        itemsKey: <T>[],
+      };
+    } on TypeError {
+      return {
+        'success': false,
+        'message': 'Error al procesar los datos de las sucursales.',
+        itemsKey: <T>[],
+      };
+    } catch (_) {
       return {
         'success': false,
         'message': 'Ocurrió un error inesperado. Intenta nuevamente.',
+        itemsKey: <T>[],
       };
     }
   }

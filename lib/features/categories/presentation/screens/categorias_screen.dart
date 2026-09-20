@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../shared/widgets/empty_view.dart';
+import '../../../../shared/widgets/error_retry_view.dart';
+import '../../../../shared/widgets/loading_view.dart';
 import '../../data/categorias_service.dart';
 
 /// Screen displaying the product categories for the client app (CU9 - Móvil).
@@ -244,15 +247,35 @@ class _CategoriasScreenState extends State<CategoriasScreen> {
 
   Widget _buildBody(BuildContext context) {
     if (_cargando && _categorias.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const LoadingView(message: 'Cargando categorías de prendas...');
     }
 
     if (_error != null) {
-      return _buildErrorState(context);
+      return ErrorRetryView(
+        title: 'No se pudieron cargar las categorías',
+        message: _error!,
+        onRetry: _cargar,
+      );
     }
 
     if (_categorias.isEmpty) {
-      return _buildEmptyState(context);
+      return RefreshIndicator(
+        onRefresh: _cargar,
+        child: EmptyView(
+          icon: Icons.category_outlined,
+          title: 'No se encontraron categorías',
+          message: _searchController.text.isNotEmpty
+              ? 'No hay resultados para "${_searchController.text}". Prueba con otro término.'
+              : 'No hay categorías disponibles para el filtro seleccionado.',
+          actionLabel: _searchController.text.isNotEmpty ? 'Limpiar búsqueda' : null,
+          onAction: _searchController.text.isNotEmpty
+              ? () {
+                  _searchController.clear();
+                  _cargar();
+                }
+              : null,
+        ),
+      );
     }
 
     return RefreshIndicator(
@@ -269,69 +292,6 @@ class _CategoriasScreenState extends State<CategoriasScreen> {
             onTap: () => _showCategoryDetails(c),
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildErrorState(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
-    return Center(
-      child: ListView(
-        shrinkWrap: true,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(32),
-        children: [
-          Icon(Icons.error_outline, size: 56, color: colorScheme.error),
-          const SizedBox(height: 16),
-          Text(
-            'No se pudieron cargar las categorías.',
-            textAlign: TextAlign.center,
-            style: textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Center(
-            child: ElevatedButton.icon(
-              onPressed: _cargar,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Center(
-      child: ListView(
-        shrinkWrap: true,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(32),
-        children: [
-          Icon(
-            Icons.category_outlined,
-            size: 56,
-            color: colorScheme.onSurface.withValues(alpha: 0.4),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'No se encontraron categorías para este filtro.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16),
-          ),
-        ],
       ),
     );
   }

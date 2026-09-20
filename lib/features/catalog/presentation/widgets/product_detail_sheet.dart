@@ -33,33 +33,65 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     }
   }
 
-  void _agregarAlCarrito() {
-    CartService.instance.addItem(
-      idProducto: widget.producto.idProducto,
-      nombre: widget.producto.nombre,
-      precioUnitario: widget.producto.precioVenta,
-      cantidad: _cantidad,
-      talla: _tallaSeleccionada,
-      color: _colorSeleccionado,
-      imagenUrl: widget.producto.imagenUrl,
-    );
+  bool _isAdding = false;
 
-    Navigator.of(context).pop();
+  Future<void> _agregarAlCarrito() async {
+    if (_isAdding) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('¡${widget.producto.nombre} agregada al carrito!'),
-        behavior: SnackBarBehavior.floating,
-        action: SnackBarAction(
-          label: 'Ver Carrito',
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const CartScreen()),
-            );
-          },
+    setState(() => _isAdding = true);
+
+    try {
+      CartService.instance.addItem(
+        idProducto: widget.producto.idProducto,
+        nombre: widget.producto.nombre,
+        precioUnitario: widget.producto.precioVenta,
+        cantidad: _cantidad,
+        talla: _tallaSeleccionada,
+        color: _colorSeleccionado,
+        imagenUrl: widget.producto.imagenUrl,
+      );
+
+      final messenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
+
+      // Close the bottom sheet modal cleanly
+      navigator.pop();
+
+      // Clear any previous or stacked snackbars to prevent persistent blocking
+      messenger.clearSnackBars();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('¡${widget.producto.nombre} agregada al carrito!'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+          action: SnackBarAction(
+            label: 'Ver Carrito',
+            onPressed: () {
+              messenger.hideCurrentSnackBar();
+              navigator.push(
+                MaterialPageRoute(builder: (_) => const CartScreen()),
+              );
+            },
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.clearSnackBars();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Error al agregar al carrito: $e'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isAdding = false);
+      }
+    }
   }
 
   void _abrirReserva() {
@@ -284,13 +316,25 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 Expanded(
                   flex: 2,
                   child: FilledButton.icon(
-                    onPressed: _agregarAlCarrito,
+                    onPressed: _isAdding ? null : _agregarAlCarrito,
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    icon: const Icon(Icons.add_shopping_cart_rounded),
-                    label: const Text('Añadir al Carrito', style: TextStyle(fontWeight: FontWeight.bold)),
+                    icon: _isAdding
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.add_shopping_cart_rounded),
+                    label: Text(
+                      _isAdding ? 'Añadiendo...' : 'Añadir al Carrito',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
               ],

@@ -1,44 +1,147 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/storage/secure_storage_service.dart';
-import '../../../auth/data/auth_service.dart';
-import '../../../auth/presentation/screens/login_screen.dart';
+import '../../../../shared/widgets/empty_view.dart';
+import '../../../../shared/widgets/error_retry_view.dart';
+import '../../../../shared/widgets/loading_view.dart';
+import '../../../ai_assistant/presentation/screens/asistente_ia_screen.dart';
+import '../../../ar_tryon/presentation/screens/probador_virtual_screen.dart';
 import '../../../branches/presentation/screens/sucursales_screen.dart';
 import '../../../cart/logic/cart_service.dart';
 import '../../../cart/presentation/screens/cart_screen.dart';
-import '../../../categories/presentation/screens/categorias_screen.dart';
-import '../../../orders/presentation/screens/mis_compras_screen.dart';
+import '../../../categories/data/categorias_service.dart';
+import '../../../notifications/data/notificaciones_service.dart';
+import '../../../notifications/presentation/screens/notificaciones_screen.dart';
+import '../../../profile/presentation/screens/perfil_screen.dart';
+import '../../../promotions/presentation/screens/promociones_screen.dart';
+import '../../../promotions/presentation/widgets/promociones_banner_section.dart';
 import '../../../reservations/presentation/screens/reservas_screen.dart';
-import '../../../tallas/presentation/screens/tallas_screen.dart';
-import '../../../ar_tryon/presentation/screens/probador_virtual_screen.dart';
 import '../../data/productos_service.dart';
 import '../widgets/product_detail_sheet.dart';
 
-/// Clients-only home screen: catalog (CU6) with full navigation drawer and
-/// quick-access module cards reflecting all mobile Use Cases.
+/// Main navigation shell for the Attention mobile app.
+///
+/// Replaces the legacy hamburger drawer with a modern Material 3
+/// [NavigationBar] composed of 5 core modules:
+/// 1. Inicio / Catálogo (CU6) with integrated Categories filter (CU9)
+/// 2. Sucursales (CU17)
+/// 3. Promociones (CU12)
+/// 4. Probador Virtual IA (CU25 / CU8)
+/// 5. Perfil y Ajustes
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({
+    super.key,
+    this.initialTabIndex = 0,
+  });
+
+  final int initialTabIndex;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialTabIndex;
+    CartService.instance.init();
+  }
+
+  void _onTabSelected(int index) {
+    setState(() => _currentIndex = index);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          _CatalogTab(
+            onNavigateToTab: _onTabSelected,
+          ),
+          const SucursalesScreen(),
+          PromocionesScreen(
+            onNavigateToCatalog: () => _onTabSelected(0),
+          ),
+          const ProbadorVirtualScreen(),
+          PerfilScreen(
+            onNavigateToCatalog: () => _onTabSelected(0),
+          ),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: _onTabSelected,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.storefront_outlined),
+            selectedIcon: Icon(Icons.storefront_rounded),
+            label: 'Inicio',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.store_mall_directory_outlined),
+            selectedIcon: Icon(Icons.store_mall_directory_rounded),
+            label: 'Sucursales',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.local_offer_outlined),
+            selectedIcon: Icon(Icons.local_offer_rounded),
+            label: 'Promociones',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.auto_awesome_outlined),
+            selectedIcon: Icon(Icons.auto_awesome_rounded),
+            label: 'Probador IA',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded),
+            label: 'Perfil',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Primary catalog screen (Tab 0) featuring integrated category filters,
+/// keyword search, promotional highlights, and 2-column garment grid.
+class _CatalogTab extends StatefulWidget {
+  const _CatalogTab({
+    required this.onNavigateToTab,
+  });
+
+  final ValueChanged<int> onNavigateToTab;
+
+  @override
+  State<_CatalogTab> createState() => _CatalogTabState();
+}
+
+class _CatalogTabState extends State<_CatalogTab> {
   final TextEditingController _searchController = TextEditingController();
 
   List<Producto> _productos = [];
+  List<Categoria> _categorias = [];
+  Categoria? _categoriaSeleccionada;
+
   bool _isLoading = true;
   bool _isSearching = false;
   String? _error;
   int _total = 0;
+  int _totalNotificacionesNoLeidas = 0;
   Map<String, dynamic>? _session;
 
   @override
   void initState() {
     super.initState();
-    CartService.instance.init();
     _loadSession();
+    _loadCategories();
     _loadProducts();
+    _loadNotificacionesContador();
   }
 
   @override
@@ -54,8 +157,22 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _loadProducts({String? q}) async {
-    final result = await ProductosService.listar(q: q, limit: 50);
+  Future<void> _loadCategories() async {
+    final result = await CategoriasService.listar(limit: 50);
+    if (!mounted) return;
+    if (result['success'] == true && result['categorias'] is List<Categoria>) {
+      setState(() {
+        _categorias = result['categorias'] as List<Categoria>;
+      });
+    }
+  }
+
+  Future<void> _loadProducts({String? q, int? idCategoria}) async {
+    final result = await ProductosService.listar(
+      q: q,
+      idCategoria: idCategoria ?? _categoriaSeleccionada?.idCategoria,
+      limit: 50,
+    );
 
     if (!mounted) return;
 
@@ -81,171 +198,54 @@ class _HomeScreenState extends State<HomeScreen> {
     return _loadProducts(q: value);
   }
 
-  Future<void> _handleLogout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Estás seguro de que deseas salir de tu cuenta?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            child: const Text('Cerrar sesión'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    await AuthService.logout();
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (route) => false,
+  void _onCategorySelected(Categoria? cat) {
+    setState(() {
+      if (_categoriaSeleccionada?.idCategoria == cat?.idCategoria) {
+        _categoriaSeleccionada = null;
+      } else {
+        _categoriaSeleccionada = cat;
+      }
+      _isLoading = true;
+    });
+    _loadProducts(
+      q: _searchController.text,
+      idCategoria: _categoriaSeleccionada?.idCategoria,
     );
   }
 
-  /// Displays an informative dialog for modules currently under development.
-  void _showComingSoonDialog({
-    required String title,
-    required String cu,
-    required String description,
-    required IconData icon,
-  }) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        final colorScheme = Theme.of(ctx).colorScheme;
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          icon: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: colorScheme.primaryContainer.withValues(alpha: 0.35),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 36, color: colorScheme.primary),
-          ),
-          title: Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.amber.shade400),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.schedule_rounded,
-                      size: 14,
-                      color: Colors.amber.shade900,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Módulo en desarrollo - Próximamente',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.amber.shade900,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                description,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: colorScheme.onSurface.withValues(alpha: 0.75),
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Identificador del sistema: $cu',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: colorScheme.outline,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            Center(
-              child: FilledButton.tonal(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('Entendido'),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _navigateToSucursales() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SucursalesScreen()),
-    );
-  }
-
-  void _navigateToCategorias() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const CategoriasScreen()),
-    );
-  }
-
-  void _navigateToTallas() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const TallasScreen()),
-    );
+  Future<void> _loadNotificacionesContador() async {
+    final count = await NotificacionesService.obtenerContadorNoLeidas();
+    if (mounted) {
+      setState(() => _totalNotificacionesNoLeidas = count);
+    }
   }
 
   void _navigateToCart() {
+    ScaffoldMessenger.of(context).clearSnackBars();
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const CartScreen()),
     );
   }
 
   void _navigateToReservas() {
+    ScaffoldMessenger.of(context).clearSnackBars();
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const ReservasScreen()),
     );
   }
 
-  void _navigateToMisCompras() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const MisComprasScreen()),
+  void _navigateToNotificaciones() async {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const NotificacionesScreen()),
     );
+    _loadNotificacionesContador();
   }
 
-  void _navigateToProbadorVirtual([Producto? producto]) {
+  void _navigateToAsistenteIA() {
+    ScaffoldMessenger.of(context).clearSnackBars();
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ProbadorVirtualScreen(prendaInicial: producto),
-      ),
+      MaterialPageRoute(builder: (_) => const AsistenteIAScreen()),
     );
   }
 
@@ -285,6 +285,27 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
+          // Attention AI Assistant Button
+          IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF7C3AED), Color(0xFF4F46E5)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.auto_awesome,
+                size: 16,
+                color: Colors.white,
+              ),
+            ),
+            tooltip: 'Attention AI (Asistente de Moda)',
+            onPressed: _navigateToAsistenteIA,
+          ),
           // Shopping Cart with dynamic badge
           ListenableBuilder(
             listenable: CartService.instance,
@@ -307,21 +328,26 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: _navigateToReservas,
           ),
           IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Cerrar sesión',
-            onPressed: _handleLogout,
+            icon: Badge(
+              isLabelVisible: _totalNotificacionesNoLeidas > 0,
+              label: Text('$_totalNotificacionesNoLeidas'),
+              child: const Icon(Icons.notifications_none_rounded),
+            ),
+            tooltip: 'Notificaciones ($_totalNotificacionesNoLeidas)',
+            onPressed: _navigateToNotificaciones,
           ),
         ],
       ),
-      drawer: _buildNavigationDrawer(context),
       body: RefreshIndicator(
-        onRefresh: () => _loadProducts(q: _searchController.text),
+        onRefresh: () async {
+          await _loadCategories();
+          await _loadProducts(q: _searchController.text);
+        },
         child: CustomScrollView(
           slivers: [
-            // Quick Access Actions Carousel / Row
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -346,148 +372,160 @@ class _HomeScreenState extends State<HomeScreen> {
                                       _handleSearch('');
                                     },
                                   )),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
                       ),
                       onSubmitted: _handleSearch,
                     ),
                     const SizedBox(height: 14),
 
-                    // Quick access shortcuts row with active client modules
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _QuickActionChip(
-                            icon: Icons.shopping_bag_rounded,
-                            label: 'Mi Carrito (CU15)',
-                            isPrimary: true,
-                            onTap: _navigateToCart,
+                    // Integrated Horizontal Category Filter Bar (CU9)
+                    _buildCategoriesFilterBar(colorScheme),
+
+                    const SizedBox(height: 10),
+
+                    // Quick AI Assistant Discovery Banner
+                    InkWell(
+                      onTap: _navigateToAsistenteIA,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              const Color(0xFF7C3AED).withValues(alpha: 0.08),
+                              const Color(0xFF4F46E5).withValues(alpha: 0.05),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          _QuickActionChip(
-                            icon: Icons.receipt_long_rounded,
-                            label: 'Mis Compras (CU21)',
-                            isPrimary: true,
-                            onTap: _navigateToMisCompras,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0xFF7C3AED).withValues(alpha: 0.22),
                           ),
-                          const SizedBox(width: 8),
-                          _QuickActionChip(
-                            icon: Icons.bookmark_added_rounded,
-                            label: 'Mis Reservas (CU14)',
-                            isPrimary: true,
-                            onTap: _navigateToReservas,
-                          ),
-                          const SizedBox(width: 8),
-                          _QuickActionChip(
-                            icon: Icons.store_mall_directory_rounded,
-                            label: 'Sucursales (CU17)',
-                            onTap: _navigateToSucursales,
-                          ),
-                          const SizedBox(width: 8),
-                          _QuickActionChip(
-                            icon: Icons.category_rounded,
-                            label: 'Categorías (CU9)',
-                            onTap: _navigateToCategorias,
-                          ),
-                          const SizedBox(width: 8),
-                          _QuickActionChip(
-                            icon: Icons.straighten_rounded,
-                            label: 'Tallas (CU7)',
-                            onTap: _navigateToTallas,
-                          ),
-                          const SizedBox(width: 8),
-                          _QuickActionChip(
-                            icon: Icons.auto_awesome_rounded,
-                            label: 'Probador Virtual IA (CU25)',
-                            isPrimary: true,
-                            onTap: _navigateToProbadorVirtual,
-                          ),
-                          const SizedBox(width: 8),
-                          _QuickActionChip(
-                            icon: Icons.view_in_ar_rounded,
-                            label: 'Probador AR (CU8)',
-                            onTap: _navigateToProbadorVirtual,
-                          ),
-                        ],
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.auto_awesome, size: 16, color: Color(0xFF7C3AED)),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '¿Buscas una combinación u outfit? Consulta a Attention AI',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF7C3AED),
+                                ),
+                              ),
+                            ),
+                            Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFF7C3AED)),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 12),
 
-                    // Results count
-                    Text(
-                      '$_total prendas disponibles para compra y reserva',
-                      style: textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurface.withValues(alpha: 0.6),
-                        fontWeight: FontWeight.w500,
-                      ),
+                    const SizedBox(height: 10),
+
+                    // Results count and active filter indicator
+                    Row(
+                      children: [
+                        Text(
+                          '$_total prendas encontradas',
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurface.withValues(alpha: 0.7),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (_categoriaSeleccionada != null) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _categoriaSeleccionada!.nombre,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                InkWell(
+                                  onTap: () => _onCategorySelected(null),
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 13,
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 6),
                   ],
                 ),
               ),
             ),
+
+            // Promotional banner linking to Tab 2
+            SliverToBoxAdapter(
+              child: PromocionesBannerSection(
+                onVerPromociones: () => widget.onNavigateToTab(2),
+              ),
+            ),
+
+            // Async states
             if (_isLoading)
               const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
+                child: LoadingView(
+                  message: 'Cargando catálogo de moda Attention...',
+                ),
               )
             else if (_error != null)
               SliverFillRemaining(
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(32),
-                  children: [
-                    Icon(
-                      Icons.cloud_off_outlined,
-                      size: 56,
-                      color: colorScheme.error,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _error!,
-                      textAlign: TextAlign.center,
-                      style: textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton.tonalIcon(
-                      onPressed: () {
-                        setState(() => _isLoading = true);
-                        _loadProducts(q: _searchController.text);
-                      },
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Reintentar'),
-                    ),
-                  ],
+                child: ErrorRetryView(
+                  title: 'No se pudieron cargar las prendas',
+                  message: _error!,
+                  onRetry: () {
+                    setState(() => _isLoading = true);
+                    _loadProducts(q: _searchController.text);
+                  },
                 ),
               )
             else if (_productos.isEmpty)
               SliverFillRemaining(
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(32),
-                  children: [
-                    Icon(
-                      Icons.checkroom_outlined,
-                      size: 56,
-                      color: colorScheme.onSurface.withValues(alpha: 0.4),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'No encontramos prendas con ese criterio.',
-                      textAlign: TextAlign.center,
-                      style: textTheme.bodyLarge,
-                    ),
-                  ],
+                child: EmptyView(
+                  icon: Icons.checkroom_outlined,
+                  title: 'No encontramos prendas',
+                  message: _searchController.text.isNotEmpty
+                      ? 'No hay productos que coincidan con "${_searchController.text}". Prueba buscando otra categoría o prenda.'
+                      : (_categoriaSeleccionada != null
+                          ? 'No hay prendas disponibles en la categoría "${_categoriaSeleccionada!.nombre}".'
+                          : 'Actualmente no hay prendas disponibles en el catálogo.'),
+                  actionLabel: _searchController.text.isNotEmpty ||
+                          _categoriaSeleccionada != null
+                      ? 'Restablecer filtros'
+                      : null,
+                  onAction: _searchController.text.isNotEmpty ||
+                          _categoriaSeleccionada != null
+                      ? () {
+                          _searchController.clear();
+                          _onCategorySelected(null);
+                        }
+                      : null,
                 ),
               )
             else
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                 sliver: SliverGrid(
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 250,
@@ -511,7 +549,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _navigateToProbadorVirtual,
+        onPressed: () => widget.onNavigateToTab(3),
         backgroundColor: Colors.purple.shade700,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.auto_awesome_rounded),
@@ -523,403 +561,96 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Complete Drawer Navigation reflecting all Mobile Use Cases organized
-  /// into logical business categories for the Client role.
-  Widget _buildNavigationDrawer(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final nombre = (_session?['nombre'] as String?) ?? 'Cliente Attention';
-    final correo = (_session?['correo'] as String?) ?? 'cliente@attention.com';
+  /// Horizontal scrolling category selector (CU9) integrated seamlessly in catalog.
+  Widget _buildCategoriesFilterBar(ColorScheme colorScheme) {
+    final isAllSelected = _categoriaSeleccionada == null;
 
-    return Drawer(
-      child: Column(
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
         children: [
-          // Drawer Header with user profile info
-          UserAccountsDrawerHeader(
-            decoration: BoxDecoration(
-              color: colorScheme.primary,
+          // "Todas" chip
+          FilterChip(
+            selected: isAllSelected,
+            showCheckmark: false,
+            avatar: Icon(
+              Icons.grid_view_rounded,
+              size: 16,
+              color: isAllSelected ? colorScheme.onPrimary : colorScheme.primary,
             ),
-            currentAccountPicture: CircleAvatar(
-              backgroundColor: colorScheme.onPrimary,
-              child: Text(
-                nombre.isNotEmpty ? nombre[0].toUpperCase() : 'A',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.primary,
-                ),
+            label: const Text(
+              'Todas',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            selectedColor: colorScheme.primary,
+            labelStyle: TextStyle(
+              color: isAllSelected ? colorScheme.onPrimary : colorScheme.onSurface,
+            ),
+            backgroundColor: colorScheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(
+                color: isAllSelected
+                    ? Colors.transparent
+                    : colorScheme.outline.withValues(alpha: 0.25),
               ),
             ),
-            accountName: Text(
-              nombre,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            accountEmail: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    correo,
-                    style: TextStyle(
-                      color: colorScheme.onPrimary.withValues(alpha: 0.85),
-                      fontSize: 12,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: colorScheme.onPrimary.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'Cliente Móvil',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            onSelected: (_) => _onCategorySelected(null),
           ),
+          const SizedBox(width: 8),
 
-          // Scrollable list of modules
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                // SECTION 1: MÓDULOS ACTIVOS DEL CLIENTE
-                _buildSectionHeader('MÓDULOS ACTIVOS (CLIENTE)'),
-                ListTile(
-                  leading: Icon(
-                    Icons.storefront_rounded,
-                    color: colorScheme.primary,
-                  ),
-                  title: const Text(
-                    'Catálogo de Prendas',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: const Text('CU6 • Consulta y búsqueda de productos'),
-                  trailing: _buildActiveBadge(),
-                  selected: true,
-                  selectedTileColor:
-                      colorScheme.primaryContainer.withValues(alpha: 0.25),
-                  onTap: () => Navigator.of(context).pop(),
-                ),
-                ListenableBuilder(
-                  listenable: CartService.instance,
-                  builder: (context, _) {
-                    final count = CartService.instance.totalItemCount;
-                    return ListTile(
-                      leading: Icon(
-                        Icons.shopping_bag_rounded,
-                        color: colorScheme.primary,
+          // Dynamic category chips loaded from API
+          for (final cat in _categorias) ...[
+            Builder(
+              builder: (context) {
+                final isSelected =
+                    _categoriaSeleccionada?.idCategoria == cat.idCategoria;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    selected: isSelected,
+                    showCheckmark: false,
+                    label: Text(
+                      cat.nombre,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.w500,
                       ),
-                      title: const Text(
-                        'Carrito de Compras',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: Text('CU15/CU21 • $count prendas añadidas'),
-                      trailing: _buildActiveBadge(),
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        _navigateToCart();
-                      },
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: Icon(
-                    Icons.receipt_long_rounded,
-                    color: colorScheme.primary,
-                  ),
-                  title: const Text(
-                    'Mis Compras & Pedidos',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: const Text('CU21/CU13 • Historial y comprobantes'),
-                  trailing: _buildActiveBadge(),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _navigateToMisCompras();
-                  },
-                ),
-                ListTile(
-                  leading: Icon(
-                    Icons.bookmark_added_rounded,
-                    color: colorScheme.primary,
-                  ),
-                  title: const Text(
-                    'Mis Reservas de Prendas',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: const Text('CU14 • Apartar y recoger en sucursal'),
-                  trailing: _buildActiveBadge(),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _navigateToReservas();
-                  },
-                ),
-                ListTile(
-                  leading: Icon(
-                    Icons.store_mall_directory_rounded,
-                    color: colorScheme.primary,
-                  ),
-                  title: const Text(
-                    'Nuestras Sucursales',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: const Text('CU17 • Ubicaciones y horarios reales'),
-                  trailing: _buildActiveBadge(),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _navigateToSucursales();
-                  },
-                ),
-                ListTile(
-                  leading: Icon(
-                    Icons.category_rounded,
-                    color: colorScheme.primary,
-                  ),
-                  title: const Text(
-                    'Categorías de Prendas',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: const Text('CU9 • Exploración por líneas de moda'),
-                  trailing: _buildActiveBadge(),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _navigateToCategorias();
-                  },
-                ),
-                ListTile(
-                  leading: Icon(
-                    Icons.straighten_rounded,
-                    color: colorScheme.primary,
-                  ),
-                  title: const Text(
-                    'Tallas y Variantes',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: const Text('CU7 • Guía de medidas y colores'),
-                  trailing: _buildActiveBadge(),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _navigateToTallas();
-                  },
-                ),
-
-                const Divider(height: 24),
-
-                // SECTION 2: INNOVACIÓN E INTELIGENCIA ARTIFICIAL
-                _buildSectionHeader('INNOVACIÓN & IA'),
-                ListTile(
-                  leading: Icon(
-                    Icons.auto_awesome_rounded,
-                    color: Colors.purple.shade700,
-                  ),
-                  title: const Text(
-                    'Probador Virtual con IA',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: const Text('CU25/CU8 • Prueba virtual, talla y complexión'),
-                  trailing: _buildActiveBadge(),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _navigateToProbadorVirtual();
-                  },
-                ),
-
-                const Divider(height: 24),
-
-                // SECTION 3: OTROS SERVICIOS
-                _buildSectionHeader('EN ENVÍOS Y CUENTA'),
-                _buildPlaceholderTile(
-                  title: 'Seguimiento de Envíos',
-                  cu: 'CU18',
-                  subtitle: 'Rastreo de delivery en tiempo real',
-                  icon: Icons.local_shipping_rounded,
-                  description:
-                      'Monitorea la ruta del repartidor y el estado de entrega de tus compras directamente en el mapa.',
-                ),
-                _buildPlaceholderTile(
-                  title: 'Notificaciones',
-                  cu: 'CU10',
-                  subtitle: 'Alertas de ofertas, pedidos y reservas',
-                  icon: Icons.notifications_none_rounded,
-                  description:
-                      'Bandeja de avisos en tiempo real sobre confirmaciones de reserva, envíos y descuentos exclusivos.',
-                ),
-
-                const Divider(height: 16),
-
-                ListTile(
-                  leading: Icon(
-                    Icons.logout_rounded,
-                    color: colorScheme.error,
-                  ),
-                  title: Text(
-                    'Cerrar Sesión',
-                    style: TextStyle(
-                      color: colorScheme.error,
-                      fontWeight: FontWeight.bold,
                     ),
+                    selectedColor: colorScheme.primary,
+                    labelStyle: TextStyle(
+                      color: isSelected
+                          ? colorScheme.onPrimary
+                          : colorScheme.onSurface,
+                    ),
+                    backgroundColor: colorScheme.surface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: BorderSide(
+                        color: isSelected
+                            ? Colors.transparent
+                            : colorScheme.outline.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    onSelected: (_) => _onCategorySelected(cat),
                   ),
-                  subtitle: const Text('Salir de la cuenta en este dispositivo'),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _handleLogout();
-                  },
-                ),
-                const SizedBox(height: 16),
-              ],
+                );
+              },
             ),
-          ),
+          ],
         ],
       ),
     );
   }
-
-  Widget _buildActiveBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.green.shade50,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.green.shade300),
-      ),
-      child: Text(
-        'Activo',
-        style: TextStyle(
-          color: Colors.green.shade800,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.8,
-          color: Theme.of(context).colorScheme.outline,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPlaceholderTile({
-    required String title,
-    required String cu,
-    required String subtitle,
-    required IconData icon,
-    required String description,
-    String badgeLabel = 'Próximamente',
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return ListTile(
-      leading: Icon(
-        icon,
-        color: colorScheme.onSurface.withValues(alpha: 0.7),
-      ),
-      title: Text(
-        title,
-        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-      ),
-      subtitle: Text(
-        '$cu • $subtitle',
-        style: TextStyle(
-          fontSize: 12,
-          color: colorScheme.onSurface.withValues(alpha: 0.55),
-        ),
-      ),
-      trailing: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.amber.shade50,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.amber.shade300),
-        ),
-        child: Text(
-          badgeLabel,
-          style: TextStyle(
-            color: Colors.amber.shade900,
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-      onTap: () {
-        Navigator.of(context).pop();
-        _showComingSoonDialog(
-          title: title,
-          cu: cu,
-          description: description,
-          icon: icon,
-        );
-      },
-    );
-  }
 }
 
-/// Compact chip widget for horizontal quick-actions row
-class _QuickActionChip extends StatelessWidget {
-  const _QuickActionChip({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.isPrimary = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool isPrimary;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return ActionChip(
-      avatar: Icon(
-        icon,
-        size: 16,
-        color: isPrimary ? colorScheme.onPrimary : colorScheme.primary,
-      ),
-      label: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: isPrimary ? FontWeight.bold : FontWeight.w500,
-          color: isPrimary ? colorScheme.onPrimary : colorScheme.onSurface,
-        ),
-      ),
-      backgroundColor: isPrimary ? colorScheme.primary : null,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: isPrimary
-              ? Colors.transparent
-              : colorScheme.outline.withValues(alpha: 0.25),
-        ),
-      ),
-      onPressed: onTap,
-    );
-  }
-}
-
-/// Catalog card for a product (image, name, price, tallas, colores).
+/// Catalog card for a product (image, name, category, price, tallas, colores).
 class _ProductCard extends StatelessWidget {
-  const _ProductCard({required this.producto, required this.onTap});
+  const _ProductCard({
+    required this.producto,
+    required this.onTap,
+  });
 
   final Producto producto;
   final VoidCallback onTap;
@@ -935,8 +666,8 @@ class _ProductCard extends StatelessWidget {
 
     return Card(
       clipBehavior: Clip.antiAlias,
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      elevation: 0.5,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: onTap,
         child: Column(
@@ -960,8 +691,9 @@ class _ProductCard extends StatelessWidget {
                     producto.nombre,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600),
+                    style: textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   if (producto.tallas.isNotEmpty) ...[
@@ -987,8 +719,7 @@ class _ProductCard extends StatelessWidget {
                               color: _parseColor(c.hex),
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color:
-                                    colorScheme.outline.withValues(alpha: 0.3),
+                                color: colorScheme.outline.withValues(alpha: 0.3),
                               ),
                             ),
                           ),
@@ -1016,7 +747,7 @@ class _ProductCard extends StatelessWidget {
   Widget _imagePlaceholder(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      color: colorScheme.primaryContainer.withValues(alpha: 0.3),
+      color: colorScheme.primaryContainer.withValues(alpha: 0.2),
       child: Icon(
         Icons.checkroom_outlined,
         size: 48,

@@ -55,34 +55,47 @@ class _CrearReservaDialogState extends State<CrearReservaDialog> {
       _error = null;
     });
 
-    final result = await ReservasService.crear(
-      fechaExpiracion: _fechaExpiracion,
-      items: [
-        {
-          'id_producto': widget.idProducto,
-          'cantidad': _cantidad,
-          'precio_unitario': widget.precioUnitario,
-        },
-      ],
-    );
-
-    if (!mounted) return;
-
-    setState(() => _enviando = false);
-
-    if (result['success'] == true) {
-      Navigator.of(context).pop(true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('¡Prenda reservada con éxito! El stock ha sido apartado.'),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
+    try {
+      final result = await ReservasService.crear(
+        fechaExpiracion: _fechaExpiracion,
+        items: [
+          {
+            'id_producto': widget.idProducto,
+            'cantidad': _cantidad,
+            'precio_unitario': widget.precioUnitario,
+          },
+        ],
       );
-    } else {
-      setState(() {
-        _error = result['message'] as String? ?? 'No se pudo registrar la reserva.';
-      });
+
+      if (!mounted) return;
+
+      if (result['success'] == true) {
+        Navigator.of(context).pop(true);
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('¡Prenda reservada con éxito! El stock ha sido apartado.'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 2),
+            ),
+          );
+      } else {
+        setState(() {
+          _error = result['message'] as String? ?? 'No se pudo registrar la reserva.';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Error al procesar la reserva: $e';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _enviando = false);
+      }
     }
   }
 
