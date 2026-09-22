@@ -56,7 +56,7 @@ class AsistenteIAService {
 
  static const Duration _timeout = Duration(seconds: 35);
 
- /// Sends a user prompt and optional conversation history to `POST /api/v1/ia/chat`.
+ /// Sends a user prompt and optional conversation history to `POST /api/v1/ia/chat` (or `/api/v1/chat`).
  static Future<IAChatResult> enviarMensaje({
  required String mensaje,
  List<IAChatMessage> historial = const [],
@@ -69,12 +69,18 @@ class AsistenteIAService {
  final String baseUrl = await ApiConfig.resolveBaseUrl();
  final String? token = await SecureStorageService.getToken();
 
- final Uri uri = Uri.parse('$baseUrl/ia/chat');
-
- // Filter and map previous messages for conversation context (up to last 10 messages)
- final List<Map<String, String>> historialPayload = historial
+ // Excluir el mensaje actual si ya se agregó al final del historial en la UI
+ final List<IAChatMessage> previousMessages = historial
  .where((m) => !m.isError && m.contenido.trim().isNotEmpty)
- .toList()
+ .toList();
+
+ if (previousMessages.isNotEmpty &&
+ previousMessages.last.isUser &&
+ previousMessages.last.contenido.trim() == mensaje.trim()) {
+ previousMessages.removeLast();
+ }
+
+ final List<Map<String, String>> historialPayload = previousMessages
  .reversed
  .take(10)
  .toList()
@@ -106,7 +112,9 @@ class AsistenteIAService {
  if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
  };
 
- final response = await http
+ // Intentar primero con /ia/chat, con fallback a /chat si el router está en raíz
+ Uri uri = Uri.parse('$baseUrl/ia/chat');
+ http.Response response = await http
  .post(
  uri,
  headers: headers,
@@ -114,26 +122,44 @@ class AsistenteIAService {
  )
  .timeout(_timeout);
 
+ if (response.statusCode == 404) {
+ uri = Uri.parse('$baseUrl/chat');
+ response = await http
+ .post(
+ uri,
+ headers: headers,
+ body: jsonEncode(bodyPayload),
+ )
+ .timeout(_timeout);
+ }
+
  final dynamic decoded = jsonDecode(utf8.decode(response.bodyBytes));
 
  if (response.statusCode >= 200 && response.statusCode < 300) {
- if (decoded is Map<String, dynamic> && decoded['data'] is Map<String, dynamic>) {
- final Map<String, dynamic> data = decoded['data'] as Map<String, dynamic>;
+ Map<String, dynamic>? dataMap;
+ if (decoded is Map<String, dynamic>) {
+ if (decoded['data'] is Map<String, dynamic>) {
+ dataMap = decoded['data'] as Map<String, dynamic>;
+ } else if (decoded.containsKey('respuesta')) {
+ dataMap = decoded;
+ }
+ }
 
- final String respuesta = data['respuesta'] as String? ?? '';
- 
- final List<int> recomendados = (data['productos_recomendados'] as List?)
+ if (dataMap != null) {
+ final String respuesta = dataMap['respuesta'] as String? ?? '';
+
+ final List<int> recomendados = (dataMap['productos_recomendados'] as List?)
  ?.map((e) => (e as num).toInt())
  .toList() ??
  const [];
 
- final List<ProductoResumenIA> detalles = (data['productos_detalle'] as List?)
+ final List<ProductoResumenIA> detalles = (dataMap['productos_detalle'] as List?)
  ?.whereType<Map<String, dynamic>>()
  .map(ProductoResumenIA.fromJson)
  .toList() ??
  const [];
 
- final List<String> sugerencias = (data['sugerencias'] as List?)
+ final List<String> sugerencias = (dataMap['sugerencias'] as List?)
  ?.map((e) => e.toString())
  .toList() ??
  const [];
