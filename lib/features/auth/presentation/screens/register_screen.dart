@@ -23,19 +23,71 @@ class _RegisterScreenState extends State<RegisterScreen> {
  final TextEditingController _confirmPasswordController =
  TextEditingController();
 
- bool _obscurePassword = true;
- bool _obscureConfirmPassword = true;
- bool _isLoading = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
+  bool _isLoading = false;
 
- @override
- void dispose() {
- _nombreController.dispose();
- _apellidoController.dispose();
- _emailController.dispose();
- _passwordController.dispose();
- _confirmPasswordController.dispose();
- super.dispose();
- }
+  @override
+  void initState() {
+    super.initState();
+    _passwordController.addListener(_onPasswordChanged);
+  }
+
+  void _onPasswordChanged() {
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _passwordController.removeListener(_onPasswordChanged);
+    _nombreController.dispose();
+    _apellidoController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  bool get _hasMinLength => _passwordController.text.length >= 8;
+  bool get _hasUppercase => _passwordController.text.contains(RegExp(r'[A-Z]'));
+  bool get _hasLowercase => _passwordController.text.contains(RegExp(r'[a-z]'));
+  bool get _hasNumber => _passwordController.text.contains(RegExp(r'[0-9]'));
+  bool get _hasSpecialChar =>
+      _passwordController.text.contains(RegExp(r'[@$!%*?&._#\-+=~^<>/\\|]'));
+  bool get _isPasswordSecure =>
+      _hasMinLength &&
+      _hasUppercase &&
+      _hasLowercase &&
+      _hasNumber &&
+      _hasSpecialChar;
+
+  Widget _buildRequisitoItem(String texto, bool cumplido) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
+      child: Row(
+        children: [
+          Icon(
+            cumplido
+                ? Icons.check_circle_rounded
+                : Icons.radio_button_unchecked_rounded,
+            size: 15,
+            color: cumplido ? Colors.green : Colors.grey,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              texto,
+              style: TextStyle(
+                fontSize: 12,
+                color: cumplido ? Colors.green.shade800 : Colors.grey.shade700,
+                fontWeight: cumplido ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
  /// Validates the form and invokes [AuthService.register].
  Future<void> _handleRegister() async {
@@ -210,36 +262,88 @@ class _RegisterScreenState extends State<RegisterScreen> {
  ),
  const SizedBox(height: 16),
  TextFormField(
- controller: _passwordController,
- decoration: InputDecoration(
- labelText: 'Contraseña *',
- helperText: 'Mínimo 6 caracteres',
- prefixIcon: const Icon(Icons.lock_outline),
- suffixIcon: IconButton(
- icon: Icon(
- _obscurePassword
- ? Icons.visibility_outlined
- : Icons.visibility_off_outlined,
- ),
- tooltip: _obscurePassword
- ? 'Mostrar contraseña'
- : 'Ocultar contraseña',
- onPressed: () {
- setState(() => _obscurePassword = !_obscurePassword);
- },
- ),
- ),
- obscureText: _obscurePassword,
- validator: (value) {
- if (value == null || value.isEmpty) {
- return 'La contraseña es requerida.';
- }
- if (value.length < 6) {
- return 'La contraseña debe tener al menos 6 caracteres.';
- }
- return null;
- },
- ),
+                controller: _passwordController,
+                decoration: InputDecoration(
+                  labelText: 'Contraseña *',
+                  helperText: 'Mínimo 8 caracteres (A-Z, a-z, 0-9 y especial)',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                    ),
+                    tooltip: _obscurePassword
+                        ? 'Mostrar contraseña'
+                        : 'Ocultar contraseña',
+                    onPressed: () {
+                      setState(() => _obscurePassword = !_obscurePassword);
+                    },
+                  ),
+                ),
+                obscureText: _obscurePassword,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'La contraseña es requerida.';
+                  }
+                  if (value.length < 8) {
+                    return 'Debe tener al menos 8 caracteres.';
+                  }
+                  if (!value.contains(RegExp(r'[A-Z]'))) {
+                    return 'Debe incluir al menos una letra mayúscula (A-Z).';
+                  }
+                  if (!value.contains(RegExp(r'[a-z]'))) {
+                    return 'Debe incluir al menos una letra minúscula (a-z).';
+                  }
+                  if (!value.contains(RegExp(r'[0-9]'))) {
+                    return 'Debe incluir al menos un número (0-9).';
+                  }
+                  if (!value.contains(RegExp(r'[@$!%*?&._#\-+=~^<>/\\|]'))) {
+                    return 'Debe incluir al menos un carácter especial (@\$!%*?&).';
+                  }
+                  return null;
+                },
+              ),
+              if (_passwordController.text.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surface
+                        .withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _isPasswordSecure
+                          ? Colors.green.shade400
+                          : Theme.of(context).colorScheme.outlineVariant,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Requisitos de seguridad:',
+                        style:
+                            Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                      ),
+                      const SizedBox(height: 4),
+                      _buildRequisitoItem('Mínimo 8 caracteres', _hasMinLength),
+                      _buildRequisitoItem(
+                          'Una letra mayúscula (A-Z)', _hasUppercase),
+                      _buildRequisitoItem(
+                          'Una letra minúscula (a-z)', _hasLowercase),
+                      _buildRequisitoItem('Un número (0-9)', _hasNumber),
+                      _buildRequisitoItem(
+                          'Un carácter especial (@\$!%*?&)', _hasSpecialChar),
+                    ],
+                  ),
+                ),
+              ],
  const SizedBox(height: 16),
  TextFormField(
  controller: _confirmPasswordController,

@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../auth/presentation/screens/login_screen.dart';
 import '../../../cart/logic/cart_service.dart';
 import '../../../cart/presentation/screens/cart_screen.dart';
 import '../../../catalog/data/productos_service.dart';
@@ -44,8 +45,6 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
  // Step 1: Photo & Morfometry state
  Uint8List? _imageBytes;
  String? _imageDataUrl;
- int _estaturaCm = 168;
- int _pesoKg = 62;
  FotoUsuario? _fotoProcesada;
  List<FotoUsuario> _fotosPrevias = [];
 
@@ -200,15 +199,42 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
  setState(() {
  _fotoProcesada = foto;
  _imageDataUrl = foto.urlImagen;
- if (foto.estaturaCm != null) _estaturaCm = foto.estaturaCm!;
- if (foto.pesoKg != null) _pesoKg = foto.pesoKg!;
  _errorMessage = null;
  });
  }
 
+ Timer? _progressTimer;
+
+ void _startProgressMessages() {
+ _progressTimer?.cancel();
+ final messages = [
+ 'Analizando fisionomía y silueta corporal con IA...',
+ 'Alineando prenda con hombros, torso y postura...',
+ 'Ajustando caída de tela, arrugas y sombras naturales...',
+ 'Sintetizando vista fotorrealista de alta precisión...',
+ ];
+ int idx = 0;
+ _progressTimer = Timer.periodic(const Duration(seconds: 4), (t) {
+ if (!mounted || _pasoActual != _PasoProbador.simulando) {
+ t.cancel();
+ return;
+ }
+ idx = (idx + 1) % messages.length;
+ setState(() {
+ _aiProgressMessage = messages[idx];
+ });
+ });
+ }
+
+ @override
+ void dispose() {
+ _progressTimer?.cancel();
+ super.dispose();
+ }
+
  // --- Step 3: Run AI Virtual Try-On Simulation ---
  Future<void> _ejecutarSimulacionIA() async {
- if (_imageDataUrl == null && _fotoProcesada == null) {
+ if (_imageDataUrl == null) {
  ScaffoldMessenger.of(context)
  ..clearSnackBars()
  ..showSnackBar(
@@ -236,51 +262,22 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
 
  setState(() {
  _pasoActual = _PasoProbador.simulando;
- _aiProgressMessage = 'Generando tu probador virtual, por favor espera...';
+ _aiProgressMessage = 'Analizando fisionomía y silueta corporal con IA...';
  _errorMessage = null;
  });
+ _startProgressMessages();
 
  try {
- // 1. Upload photo if not yet registered in backend
- int fotoId;
- if (_fotoProcesada != null) {
- fotoId = _fotoProcesada!.idFoto;
- } else {
- setState(() {
- _aiProgressMessage = 'Preparando fotografía y analizando proporciones...';
- });
-
- final uploadRes = await ProbadorVirtualService.subirFoto(
- imagenDataUrl: _imageDataUrl!,
- estatura: _estaturaCm,
- peso: _pesoKg,
- );
-
- if (uploadRes['success'] != true || uploadRes['foto'] == null) {
- throw Exception(
- uploadRes['message'] ?? 'Error al procesar la foto con el motor de IA.',
- );
- }
-
- final foto = uploadRes['foto'] as FotoUsuario;
- _fotoProcesada = foto;
- fotoId = foto.idFoto;
- }
-
- if (!mounted) return;
- setState(() {
- _aiProgressMessage = 'Generando tu probador virtual, por favor espera...\nLa IA está ajustando la prenda a tu silueta...';
- });
-
- // 2. Perform virtual try-on simulation
- final simRes = await ProbadorVirtualService.probarPrenda(
- fotoId: fotoId,
+ // Simulación directa con Anti-SSRF (solo producto_id) y Cero Retención Biométrica
+ final simRes = await ProbadorVirtualService.probarPrendaDirecto(
  productoId: _prendaSeleccionada!.idProducto,
+ imagenUsuario: _imageDataUrl!,
  talla: _tallaSeleccionada ?? 'M',
  colorNombre: _colorSeleccionado,
  colorHex: _colorHexSeleccionado,
- prendaImagenUrl: _prendaSeleccionada!.imagenUrl,
  );
+
+ _progressTimer?.cancel();
 
  if (simRes['success'] != true || simRes['simulacion'] == null) {
  throw Exception(
@@ -296,24 +293,41 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
  _pasoActual = _PasoProbador.resultado;
  });
  } catch (e) {
+ _progressTimer?.cancel();
  if (!mounted) return;
  setState(() {
  _pasoActual = _PasoProbador.prenda;
  _errorMessage = e.toString().replaceFirst('Exception: ', '');
  });
 
- ScaffoldMessenger.of(context)
- ..clearSnackBars()
- ..showSnackBar(
- SnackBar(
- content: Text(_errorMessage ?? 'Ocurrió un error en la simulación.'),
- duration: const Duration(seconds: 2),
- backgroundColor: Colors.red.shade800,
- behavior: SnackBarBehavior.floating,
- ),
- );
- }
- }
+      final isAuthError = _errorMessage?.toLowerCase().contains('token') == true ||
+          _errorMessage?.toLowerCase().contains('sesión') == true ||
+          _errorMessage?.toLowerCase().contains('inicie') == true ||
+          _errorMessage?.toLowerCase().contains('autenticado') == true;
+
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(_errorMessage ?? 'Ocurrió un error en la simulación.'),
+            duration: const Duration(seconds: 4),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            action: isAuthError
+                ? SnackBarAction(
+                    label: 'Ingresar',
+                    textColor: Colors.white,
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      );
+                    },
+                  )
+                : null,
+          ),
+        );
+    }
+  }
 
  // --- Step 4 Post Actions: Cart & Reservation ---
  Future<void> _agregarAlCarrito() async {
@@ -604,7 +618,77 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
  ),
  ),
  ),
- const SizedBox(height: 16),
+ const SizedBox(height: 14),
+
+ // Preloaded Garment Banner (when arriving from Catalog)
+ if (_prendaSeleccionada != null)
+ Container(
+ margin: const EdgeInsets.only(bottom: 14),
+ padding: const EdgeInsets.all(12),
+ decoration: BoxDecoration(
+ color: Colors.purple.shade50.withValues(alpha: 0.6),
+ borderRadius: BorderRadius.circular(16),
+ border: Border.all(color: Colors.purple.shade200),
+ ),
+ child: Row(
+ children: [
+ ClipRRect(
+ borderRadius: BorderRadius.circular(10),
+ child: Container(
+ width: 56,
+ height: 56,
+ color: Colors.white,
+ child: _prendaSeleccionada!.imagenUrl != null &&
+ _prendaSeleccionada!.imagenUrl!.startsWith('http')
+ ? Image.network(
+ _prendaSeleccionada!.imagenUrl!,
+ fit: BoxFit.cover,
+ errorBuilder: (_, _, _) => const Icon(Icons.checkroom, color: Colors.purple),
+ )
+ : const Icon(Icons.checkroom, color: Colors.purple),
+ ),
+ ),
+ const SizedBox(width: 12),
+ Expanded(
+ child: Column(
+ crossAxisAlignment: CrossAxisAlignment.start,
+ children: [
+ Row(
+ children: [
+ Icon(Icons.verified_rounded, size: 14, color: Colors.purple.shade700),
+ const SizedBox(width: 4),
+ Text(
+ 'PRENDA PRECARGADA',
+ style: TextStyle(
+ fontSize: 10,
+ fontWeight: FontWeight.bold,
+ letterSpacing: 0.5,
+ color: Colors.purple.shade700,
+ ),
+ ),
+ ],
+ ),
+ const SizedBox(height: 2),
+ Text(
+ _prendaSeleccionada!.nombre,
+ style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+ maxLines: 1,
+ overflow: TextOverflow.ellipsis,
+ ),
+ Text(
+ 'Talla: ${_tallaSeleccionada ?? "M"} • Categ: ${_prendaSeleccionada!.nombreCategoria ?? "Prenda"}',
+ style: TextStyle(fontSize: 12, color: colorScheme.onSurface.withValues(alpha: 0.7)),
+ ),
+ ],
+ ),
+ ),
+ TextButton(
+ onPressed: () => setState(() => _pasoActual = _PasoProbador.prenda),
+ child: const Text('Cambiar', style: TextStyle(fontSize: 12)),
+ ),
+ ],
+ ),
+ ),
 
  // Photo Preview Area
  Center(
@@ -693,7 +777,7 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
  ),
  icon: const Icon(Icons.photo_camera_rounded),
- label: const Text('Cámara'),
+ label: const Text('Tomar Foto'),
  ),
  ),
  const SizedBox(width: 10),
@@ -705,7 +789,7 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
  ),
  icon: const Icon(Icons.photo_library_rounded),
- label: const Text('Galería'),
+ label: const Text('Elegir de Galería'),
  ),
  ),
  const SizedBox(width: 10),
@@ -770,76 +854,37 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
  ),
  ],
 
- const SizedBox(height: 20),
-
- // Anthropometric Inputs (Estatura & Peso)
- Card(
- elevation: 1,
- shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
- child: Padding(
- padding: const EdgeInsets.all(14),
- child: Column(
- crossAxisAlignment: CrossAxisAlignment.start,
- children: [
- Row(
- children: [
- const Icon(Icons.accessibility_new_rounded, size: 20),
- const SizedBox(width: 8),
- Expanded(
- child: Text(
- 'Medidas Opcionales (Recomendación precisa)',
- style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
- overflow: TextOverflow.ellipsis,
- ),
- ),
- ],
- ),
- const SizedBox(height: 12),
- Row(
- children: [
- Expanded(
- child: Column(
- crossAxisAlignment: CrossAxisAlignment.start,
- children: [
- Text('Estatura: $_estaturaCm cm', style: const TextStyle(fontSize: 12)),
- Slider(
- value: _estaturaCm.toDouble(),
- min: 120,
- max: 210,
- divisions: 90,
- label: '$_estaturaCm cm',
- onChanged: (v) => setState(() => _estaturaCm = v.round()),
- ),
- ],
- ),
- ),
- const SizedBox(width: 12),
- Expanded(
- child: Column(
- crossAxisAlignment: CrossAxisAlignment.start,
- children: [
- Text('Peso: $_pesoKg kg', style: const TextStyle(fontSize: 12)),
- Slider(
- value: _pesoKg.toDouble(),
- min: 35,
- max: 130,
- divisions: 95,
- label: '$_pesoKg kg',
- onChanged: (v) => setState(() => _pesoKg = v.round()),
- ),
- ],
- ),
- ),
- ],
- ),
- ],
- ),
- ),
- ),
-
  const SizedBox(height: 24),
 
- // Confirm & Proceed to Garment Selection
+ // Action Button: Generate AI simulation if garment is preloaded, otherwise pick garment
+ if (_prendaSeleccionada != null) ...[
+ FilledButton.icon(
+ onPressed: hasPhoto ? _ejecutarSimulacionIA : null,
+ style: FilledButton.styleFrom(
+ padding: const EdgeInsets.symmetric(vertical: 16),
+ backgroundColor: Colors.purple.shade700,
+ foregroundColor: Colors.white,
+ shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+ ),
+ icon: const Icon(Icons.auto_awesome_rounded),
+ label: const Text(
+ 'Generar Vista con IA (Probarme esta Prenda)',
+ style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+ ),
+ ),
+ const SizedBox(height: 10),
+ OutlinedButton.icon(
+ onPressed: hasPhoto
+ ? () => setState(() => _pasoActual = _PasoProbador.prenda)
+ : null,
+ style: OutlinedButton.styleFrom(
+ padding: const EdgeInsets.symmetric(vertical: 13),
+ shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+ ),
+ icon: const Icon(Icons.checkroom_rounded),
+ label: const Text('Elegir otra prenda del catálogo'),
+ ),
+ ] else ...[
  FilledButton.icon(
  onPressed: hasPhoto
  ? () => setState(() => _pasoActual = _PasoProbador.prenda)
@@ -854,6 +899,7 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
  ),
  ),
+ ],
  ],
  );
  }
@@ -878,6 +924,7 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
  }
 
  Widget _renderResultVisualizerWidget(SimulacionProbadorResult sim) {
+ Widget coreImage;
  if (!_mostrarFotoOriginal &&
  sim.resultadoImagenUrl != null &&
  sim.resultadoImagenUrl!.isNotEmpty &&
@@ -887,18 +934,32 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
  final commaIdx = sim.resultadoImagenUrl!.indexOf(',');
  if (commaIdx != -1) {
  final b64 = sim.resultadoImagenUrl!.substring(commaIdx + 1);
- return Image.memory(base64Decode(b64), fit: BoxFit.cover);
+ coreImage = Image.memory(base64Decode(b64), fit: BoxFit.contain);
+ } else {
+ coreImage = _renderPhotoWidget();
  }
- } catch (_) {}
+ } catch (_) {
+ coreImage = _renderPhotoWidget();
+ }
  } else if (sim.resultadoImagenUrl!.startsWith('http')) {
- return Image.network(
+ coreImage = Image.network(
  sim.resultadoImagenUrl!,
- fit: BoxFit.cover,
+ fit: BoxFit.contain,
  errorBuilder: (_, _, _) => _renderPhotoWidget(),
  );
+ } else {
+ coreImage = _renderPhotoWidget();
  }
+ } else {
+ coreImage = _renderPhotoWidget();
  }
- return _renderPhotoWidget();
+
+ return InteractiveViewer(
+ minScale: 1.0,
+ maxScale: 4.0,
+ clipBehavior: Clip.none,
+ child: Center(child: coreImage),
+ );
  }
 
  // --- Step 2 View: Catalog Garment & Size Selector ---
@@ -1457,7 +1518,36 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
  ),
  ),
 
- const SizedBox(height: 18),
+ const SizedBox(height: 12),
+
+ // Acciones de Pantalla Completa (Zoom) y Compartir / Guardar
+ Row(
+ children: [
+ Expanded(
+ child: OutlinedButton.icon(
+ onPressed: () => _abrirPantallaCompleta(sim),
+ style: OutlinedButton.styleFrom(
+ padding: const EdgeInsets.symmetric(vertical: 12),
+ shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+ ),
+ icon: const Icon(Icons.fullscreen_rounded),
+ label: const Text('Pantalla Completa (Zoom)'),
+ ),
+ ),
+ const SizedBox(width: 10),
+ OutlinedButton.icon(
+ onPressed: () => _compartirResultado(sim),
+ style: OutlinedButton.styleFrom(
+ padding: const EdgeInsets.symmetric(vertical: 12),
+ shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+ ),
+ icon: const Icon(Icons.share_rounded),
+ label: const Text('Compartir'),
+ ),
+ ],
+ ),
+
+ const SizedBox(height: 16),
 
  // AI Fit & Sizing Analysis Card
  Card(
@@ -1530,8 +1620,8 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
  const SizedBox(width: 4),
  Expanded(
  child: _buildMetricBox(
- label: 'Complexión',
- value: _fotoProcesada?.complexion ?? 'MEDIA',
+ label: 'Ajuste IA',
+ value: sim.ajusteEstimado,
  isHighlighted: false,
  ),
  ),
@@ -1664,5 +1754,58 @@ class _ProbadorVirtualScreenState extends State<ProbadorVirtualScreen> {
  final parsed = int.tryParse(cleanHex, radix: 16);
  if (parsed == null) return Colors.grey;
  return Color(parsed);
+ }
+
+ void _abrirPantallaCompleta(SimulacionProbadorResult sim) {
+ Navigator.of(context).push(
+ MaterialPageRoute(
+ fullscreenDialog: true,
+ builder: (ctx) => Scaffold(
+ backgroundColor: Colors.black,
+ appBar: AppBar(
+ backgroundColor: Colors.black,
+ foregroundColor: Colors.white,
+ title: Text(
+ sim.productoNombre,
+ style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+ ),
+ actions: [
+ IconButton(
+ icon: const Icon(Icons.share_rounded),
+ tooltip: 'Compartir foto',
+ onPressed: () => _compartirResultado(sim),
+ ),
+ ],
+ ),
+ body: Center(
+ child: InteractiveViewer(
+ minScale: 1.0,
+ maxScale: 5.0,
+ child: _renderResultVisualizerWidget(sim),
+ ),
+ ),
+ ),
+ ),
+ );
+ }
+
+ void _compartirResultado(SimulacionProbadorResult sim) {
+ ScaffoldMessenger.of(context)
+ ..clearSnackBars()
+ ..showSnackBar(
+ SnackBar(
+ content: Row(
+ children: [
+ const Icon(Icons.check_circle_rounded, color: Colors.greenAccent),
+ const SizedBox(width: 8),
+ Expanded(
+ child: Text('Prenda ${sim.productoNombre} lista para compartir/guardar.'),
+ ),
+ ],
+ ),
+ duration: const Duration(seconds: 3),
+ behavior: SnackBarBehavior.floating,
+ ),
+ );
  }
 }

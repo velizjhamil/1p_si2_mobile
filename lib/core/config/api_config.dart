@@ -42,14 +42,15 @@ class ApiConfig {
  /// Candidate base URLs para desarrollo local (ADR-002):
  /// 1. Localhost via adb reverse (dispositivo físico USB).
  /// 2. Android emulator host loopback (10.0.2.2).
- /// 3. Windows host LAN IP (192.168.0.2).
+ /// 3. Windows host LAN IP (192.168.0.6 / 192.168.0.2).
  static const List<String> candidateBaseUrls = [
  'http://localhost:8000/api/v1',
  'http://10.0.2.2:8000/api/v1',
+ 'http://192.168.0.6:8000/api/v1',
  'http://192.168.0.2:8000/api/v1',
  ];
 
- static const Duration _probeTimeout = Duration(milliseconds: 1500);
+ static const Duration _probeTimeout = Duration(milliseconds: 2000);
 
  /// Base URL resolved by [resolveBaseUrl] (null until first call).
  static String? _resolved;
@@ -60,15 +61,16 @@ class ApiConfig {
 
  /// Retorna la URL base activa para comunicarse con el backend.
  ///
- /// Si la URL es remota (producción) y no se indicó `USE_LOCAL_BACKEND`,
- /// retorna de forma instantánea la URL de producción.
- /// Si `USE_LOCAL_BACKEND=true`, sondea los candidatos locales (ADR-002).
+ /// Sondea primero los candidatos locales (ADR-002): si `adb reverse` o el
+ /// servidor local están activos, conecta inmediatamente a localhost.
+ /// Si ningún entorno local responde, conmuta de forma transparente al
+ /// backend de producción en Render.
  static Future<String> resolveBaseUrl() async {
  if (_resolved != null) return _resolved!;
  if (_inFlight != null) return _inFlight!;
 
- // Si apuntamos a producción o servicio remoto, retornamos de inmediato
- if (!useLocalBackend && isRemoteUrl) {
+ // Si se especificó explícitamente una URL personalizada distinta a producción:
+ if (baseUrl != productionBaseUrl && isRemoteUrl) {
  _resolved = baseUrl;
  return _resolved!;
  }
@@ -83,27 +85,25 @@ class ApiConfig {
  }
 
  static Future<String> _probeAll() async {
- final candidates = [
- if (!candidateBaseUrls.contains(baseUrl)) baseUrl,
- ...candidateBaseUrls,
- ];
-
- for (final url in candidates) {
+ // 1. Sondeo prioritario de entornos locales (USB adb reverse, emulador, LAN)
+ for (final url in candidateBaseUrls) {
  if (await _probe(url)) {
  _resolved = url;
  return url;
  }
  }
- _resolved = baseUrl.isNotEmpty ? baseUrl : candidateBaseUrls.first;
+
+ // 2. Si no hay backend local respondiendo, fallback seguro a la nube (Render)
+ _resolved = productionBaseUrl;
  return _resolved!;
  }
 
  static Future<bool> _probe(String targetUrl) async {
  try {
  final response = await http
- .get(Uri.parse('$targetUrl/productos?limit=1'))
+ .get(Uri.parse('$targetUrl/categorias?limit=1'))
  .timeout(_probeTimeout);
- return response.statusCode > 0;
+ return response.statusCode == 200;
  } catch (_) {
  return false;
  }

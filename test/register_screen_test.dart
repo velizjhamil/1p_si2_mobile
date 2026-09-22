@@ -34,7 +34,7 @@ void main() {
     expect(find.text('La contraseña es requerida.'), findsOneWidget);
   });
 
-  testWidgets('validates password length and password mismatch',
+  testWidgets('validates password security requirements and mismatch',
       (WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: RegisterScreen()));
 
@@ -45,11 +45,11 @@ void main() {
         find.widgetWithText(TextFormField, 'Correo electrónico *'),
         'carlos@test.com');
 
-    // Enter short password
+    // Enter short password (< 8 chars)
     await tester.enterText(
         find.widgetWithText(TextFormField, 'Contraseña *'), '123');
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Confirmar contraseña *'), '123456');
+        find.widgetWithText(TextFormField, 'Confirmar contraseña *'), '123');
 
     final submitButton =
         find.widgetWithText(ElevatedButton, 'Crear Cuenta');
@@ -57,15 +57,23 @@ void main() {
     await tester.tap(submitButton);
     await tester.pump();
 
-    expect(find.text('La contraseña debe tener al menos 6 caracteres.'),
+    expect(find.text('Debe tener al menos 8 caracteres.'), findsOneWidget);
+    expect(find.text('Requisitos de seguridad:'), findsOneWidget);
+
+    // Enter 8+ chars but without uppercase
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Contraseña *'), 'password123!');
+    await tester.tap(submitButton);
+    await tester.pump();
+    expect(find.text('Debe incluir al menos una letra mayúscula (A-Z).'),
         findsOneWidget);
 
-    // Enter longer password but mismatched confirmation
+    // Enter secure password but mismatched confirmation
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Contraseña *'), 'password123');
+        find.widgetWithText(TextFormField, 'Contraseña *'), 'Password123!');
     await tester.enterText(
         find.widgetWithText(TextFormField, 'Confirmar contraseña *'),
-        'different_pass');
+        'DifferentPass123!');
 
     await tester.tap(submitButton);
     await tester.pump();

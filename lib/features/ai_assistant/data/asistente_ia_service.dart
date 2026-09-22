@@ -60,6 +60,10 @@ class AsistenteIAService {
  static Future<IAChatResult> enviarMensaje({
  required String mensaje,
  List<IAChatMessage> historial = const [],
+ int? idSucursal,
+ String? nombreSucursal,
+ String? generoUsuario,
+ String? nombreUsuario,
  }) async {
  try {
  final String baseUrl = await ApiConfig.resolveBaseUrl();
@@ -82,6 +86,19 @@ class AsistenteIAService {
  'mensaje': mensaje.trim(),
  'historial': historialPayload,
  };
+
+ if (idSucursal != null) {
+ bodyPayload['id_sucursal'] = idSucursal;
+ }
+ if (nombreSucursal != null && nombreSucursal.isNotEmpty) {
+ bodyPayload['nombre_sucursal'] = nombreSucursal;
+ }
+ if (generoUsuario != null && generoUsuario.isNotEmpty) {
+ bodyPayload['genero_usuario'] = generoUsuario;
+ }
+ if (nombreUsuario != null && nombreUsuario.isNotEmpty) {
+ bodyPayload['nombre_usuario'] = nombreUsuario;
+ }
 
  final headers = <String, String>{
  'Content-Type': 'application/json',

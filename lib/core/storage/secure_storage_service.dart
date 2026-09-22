@@ -90,4 +90,37 @@ class SecureStorageService {
  static Future<String?> getThemeMode() async {
  return _storage.read(key: _themeModeKey);
  }
+
+ static const String _generoKey = 'user_preferred_gender';
+ static const String _sucursalIdKey = 'user_preferred_sucursal_id';
+ static const String _sucursalNombreKey = 'user_preferred_sucursal_nombre';
+
+ /// Persists user preferred shopping gender ('Hombre' or 'Mujer').
+ static Future<void> saveGenero(String genero) async {
+ await _storage.write(key: _generoKey, value: genero);
+ }
+
+ /// Returns user preferred gender or defaults to 'Hombre' if not set.
+ static Future<String> getGenero() async {
+ final val = await _storage.read(key: _generoKey);
+ return (val != null && val.isNotEmpty) ? val : 'Hombre';
+ }
+
+ /// Persists user preferred branch (id and name).
+ static Future<void> saveSucursalPreferida({required int id, required String nombre}) async {
+ await _storage.write(key: _sucursalIdKey, value: id.toString());
+ await _storage.write(key: _sucursalNombreKey, value: nombre);
+ }
+
+ /// Returns user preferred branch id or null if not set.
+ static Future<int?> getSucursalPreferidaId() async {
+ final raw = await _storage.read(key: _sucursalIdKey);
+ if (raw == null) return null;
+ return int.tryParse(raw);
+ }
+
+ /// Returns user preferred branch name or null if not set.
+ static Future<String?> getSucursalPreferidaNombre() async {
+ return _storage.read(key: _sucursalNombreKey);
+ }
 }

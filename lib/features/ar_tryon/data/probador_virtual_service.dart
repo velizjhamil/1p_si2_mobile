@@ -59,6 +59,9 @@ class SimulacionProbadorResult {
  this.categoria,
  this.fechaSimulacion,
  this.guardada = false,
+ this.motor,
+ this.comentarioEstilo,
+ this.geminiActivo = false,
  });
 
  factory SimulacionProbadorResult.fromJson(Map<String, dynamic> json) {
@@ -82,6 +85,9 @@ class SimulacionProbadorResult {
  categoria: json['categoria'] as String?,
  fechaSimulacion: fecha,
  guardada: json['guardada'] as bool? ?? false,
+ motor: json['motor'] as String?,
+ comentarioEstilo: json['comentario_estilo'] as String?,
+ geminiActivo: json['gemini_activo'] as bool? ?? false,
  );
  }
 
@@ -99,6 +105,9 @@ class SimulacionProbadorResult {
  final String? categoria;
  final DateTime? fechaSimulacion;
  final bool guardada;
+ final String? motor;
+ final String? comentarioEstilo;
+ final bool geminiActivo;
 }
 
 /// Service connecting Attention Mobile to the FastAPI AI Virtual Try-On endpoints.
@@ -302,6 +311,132 @@ class ProbadorVirtualService {
  return {
  'success': false,
  'message': 'Error al procesar la simulación de la prenda.',
+ };
+ } catch (_) {
+ return {
+ 'success': false,
+ 'message': 'Ocurrió un error inesperado al realizar la simulación.',
+ };
+ } finally {
+ if (client == null) {
+ httpClient.close();
+ }
+ }
+ }
+
+ /// Realiza la simulación directa con Cero Retención Biométrica y Blindaje Anti-SSRF.
+ static Future<Map<String, dynamic>> probarPrendaDirecto({
+ required int productoId,
+ required String imagenUsuario,
+ String talla = 'M',
+ String? colorNombre,
+ String? colorHex,
+ int? estaturaCm,
+ int? pesoKg,
+ String complexion = 'MEDIA',
+ http.Client? client,
+ }) async {
+ final baseUrl = await ApiConfig.resolveBaseUrl();
+ final token = await SecureStorageService.getToken();
+
+ if (token == null || token.isEmpty) {
+ return {
+ 'success': false,
+ 'message': 'No hay sesión activa. Inicie sesión para usar el probador virtual.',
+ };
+ }
+
+ String? sanitizedHex = colorHex?.trim();
+ if (sanitizedHex != null && !sanitizedHex.startsWith('#')) {
+ sanitizedHex = '#$sanitizedHex';
+ }
+ if (sanitizedHex != null && sanitizedHex.length != 7) {
+ sanitizedHex = null;
+ }
+
+ final payload = <String, dynamic>{
+ 'producto_id': productoId,
+ 'imagen_usuario': imagenUsuario,
+ 'talla_seleccionada': talla.trim().toUpperCase(),
+ if (colorNombre != null && colorNombre.isNotEmpty)
+ 'color_nombre': colorNombre.trim(),
+ 'color_hex': ?sanitizedHex,
+ 'estatura_cm': ?estaturaCm,
+ 'peso_kg': ?pesoKg,
+ 'complexion': complexion,
+ };
+
+ final httpClient = client ?? http.Client();
+ try {
+ final response = await httpClient
+ .post(
+ Uri.parse('$baseUrl/probador-virtual/probar-directo'),
+ headers: {
+ 'Content-Type': 'application/json',
+ 'Authorization': 'Bearer $token',
+ },
+ body: jsonEncode(payload),
+ )
+ .timeout(const Duration(seconds: 90));
+
+      if (response.statusCode == 404) {
+        // Fallback automático de resiliencia: si el servidor responde 404 (ej. entorno de producción
+        // en Render donde el endpoint directo aún no está desplegado), conmutamos de forma transparente
+        // al flujo oficial de dos pasos: /subir-foto + /probar
+        final uploadRes = await subirFoto(
+          imagenDataUrl: imagenUsuario,
+          estatura: estaturaCm,
+          peso: pesoKg,
+          client: httpClient,
+        );
+        if (uploadRes['success'] == true && uploadRes['foto'] is FotoUsuario) {
+          final foto = uploadRes['foto'] as FotoUsuario;
+          return await probarPrenda(
+            fotoId: foto.idFoto,
+            productoId: productoId,
+            talla: talla,
+            colorNombre: colorNombre,
+            colorHex: colorHex,
+            client: httpClient,
+          );
+        } else {
+          return uploadRes;
+        }
+      }
+
+ final Map<String, dynamic> body =
+ jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+
+ if ((response.statusCode == 200 || response.statusCode == 201) &&
+ body['status'] == 'success') {
+ final data = body['data'] as Map<String, dynamic>;
+ return {
+ 'success': true,
+ 'simulacion': SimulacionProbadorResult.fromJson(data),
+ 'message': body['message'] ?? 'Simulación procesada exitosamente.',
+ };
+ }
+
+ final errorMsg =
+ body['detail'] ?? body['message'] ?? 'No se pudo procesar la simulación.';
+ return {
+ 'success': false,
+ 'message': errorMsg.toString(),
+ };
+ } on TimeoutException {
+ return {
+ 'success': false,
+ 'message': 'La simulación tomó más tiempo del esperado (90s). Por favor intente nuevamente.',
+ };
+ } on SocketException {
+ return {
+ 'success': false,
+ 'message': 'Sin conexión con el servidor del probador virtual.',
+ };
+ } on http.ClientException {
+ return {
+ 'success': false,
+ 'message': 'Error de comunicación con el servidor al simular.',
  };
  } catch (_) {
  return {

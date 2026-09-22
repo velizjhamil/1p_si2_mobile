@@ -146,7 +146,7 @@ class ProductosService {
  Uri.parse('$baseUrl/productos').replace(queryParameters: query),
  headers: headers,
  )
- .timeout(const Duration(seconds: 15));
+ .timeout(const Duration(seconds: 30));
 
  if (response.statusCode != 200) {
  return {

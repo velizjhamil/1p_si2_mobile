@@ -469,7 +469,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               ),
               icon: const Icon(Icons.auto_awesome_rounded),
               label: const Text(
-                'Probar en Probador Virtual IA',
+                'Vestidor Virtual (Probarse Prenda)',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
