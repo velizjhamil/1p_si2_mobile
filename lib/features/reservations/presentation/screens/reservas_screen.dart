@@ -5,7 +5,8 @@ import '../../../../shared/widgets/error_retry_view.dart';
 import '../../../../shared/widgets/loading_view.dart';
 import '../../data/reservas_service.dart';
 
-/// Screen displaying the client's garment reservations (CU14).
+/// Screen displaying the client's garment reservations with cash payment confirmation,
+/// delivery modality (store pickup / home delivery) and 48-hour expiration countdown.
 class ReservasScreen extends StatefulWidget {
   const ReservasScreen({super.key});
 
@@ -183,7 +184,7 @@ class _ReservasScreenState extends State<ReservasScreen> {
           final r = _reservas[index];
           return _ReservaCard(
             reserva: r,
-            onCancel: r.estado == 'PENDIENTE' ? () => _cancelarReserva(r) : null,
+            onCancel: (r.esPendiente || r.esConfirmada) && !r.esExpirada ? () => _cancelarReserva(r) : null,
           );
         },
       ),
@@ -192,7 +193,10 @@ class _ReservasScreenState extends State<ReservasScreen> {
 }
 
 class _ReservaCard extends StatelessWidget {
-  const _ReservaCard({required this.reserva, this.onCancel});
+  const _ReservaCard({
+    required this.reserva,
+    this.onCancel,
+  });
 
   final ReservaItem reserva;
   final VoidCallback? onCancel;
@@ -214,6 +218,7 @@ class _ReservaCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Cabecera: ID + Sucursal + Estado
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -230,20 +235,90 @@ class _ReservaCard extends StatelessWidget {
                 _EstadoBadge(estado: reserva.estado),
               ],
             ),
-            const SizedBox(height: 10),
-            Text(
-              'Válida hasta: $fechaExp',
-              style: TextStyle(
-                fontSize: 12,
-                color: colorScheme.onSurface.withValues(alpha: 0.75),
-                fontWeight: FontWeight.w500,
+            const SizedBox(height: 6),
+
+            // Modalidad de entrega y sucursal
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: reserva.esRetiroEnTienda ? Colors.blue.shade50 : Colors.purple.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: reserva.esRetiroEnTienda ? Colors.blue.shade200 : Colors.purple.shade200,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        reserva.esRetiroEnTienda ? Icons.storefront_rounded : Icons.local_shipping_outlined,
+                        size: 14,
+                        color: reserva.esRetiroEnTienda ? Colors.blue.shade800 : Colors.purple.shade800,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        reserva.esRetiroEnTienda ? 'Retiro en Tienda' : 'Envío a Domicilio',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: reserva.esRetiroEnTienda ? Colors.blue.shade900 : Colors.purple.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (reserva.sucursalNombre != null) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '📍 ${reserva.sucursalNombre!}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (reserva.esEnvioDomicilio && reserva.direccionEntrega != null && reserva.direccionEntrega!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(Icons.home_outlined, size: 14, color: Colors.black54),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Entrega en: ${reserva.direccionEntrega!}',
+                      style: const TextStyle(fontSize: 11, color: Colors.black87),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
+            ],
+            const SizedBox(height: 6),
+
+            // Temporizador de 48 horas / Fecha
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Fecha límite: $fechaExp',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.onSurface.withValues(alpha: 0.75),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                _TemporizadorBadge(reserva: reserva),
+              ],
             ),
             const SizedBox(height: 10),
             const Divider(),
             const SizedBox(height: 6),
 
-            // Products list
+            // Prendas apartadas
             Text(
               'Prendas apartadas:',
               style: textTheme.labelMedium?.copyWith(
@@ -274,42 +349,158 @@ class _ReservaCard extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             const Divider(),
             const SizedBox(height: 6),
 
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Total estimado:', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    Text(
-                      'Bs ${reserva.totalEstimado.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.primary,
+            // Desglose Financiero (Pago en Efectivo)
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Total a pagar:', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                      Text(
+                        'Bs ${reserva.totalEstimado.toStringAsFixed(2)}',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.payments_outlined, size: 14, color: Colors.green),
+                          const SizedBox(width: 4),
+                          Text(
+                            reserva.esRetiroEnTienda ? 'Pago al retirar en tienda:' : 'Pago contra entrega:',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        'Efectivo al recibir',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Anticipo requerido:', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                      Text('Bs 0.00 (Sin anticipo)',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.green)),
+                    ],
+                  ),
+                  if (reserva.montoReembolsado > 0) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Reembolso:', style: TextStyle(fontSize: 12, color: Colors.blue)),
+                        Text(
+                          'Bs ${reserva.montoReembolsado.toStringAsFixed(2)}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
+                        ),
+                      ],
                     ),
                   ],
-                ),
-                if (onCancel != null)
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Botones de acción
+            if (onCancel != null)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
                   OutlinedButton.icon(
                     onPressed: onCancel,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: colorScheme.error,
                       side: BorderSide(color: colorScheme.error),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
                     icon: const Icon(Icons.cancel_outlined, size: 16),
-                    label: const Text('Cancelar', style: TextStyle(fontSize: 12)),
+                    label: const Text('Cancelar Reserva', style: TextStyle(fontSize: 12)),
                   ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _TemporizadorBadge extends StatelessWidget {
+  const _TemporizadorBadge({required this.reserva});
+
+  final ReservaItem reserva;
+
+  @override
+  Widget build(BuildContext context) {
+    if (reserva.esCancelada || reserva.esCompletada) {
+      return const SizedBox.shrink();
+    }
+
+    Color bg;
+    Color fg;
+    IconData icon;
+
+    if (reserva.esExpirada || (reserva.minutosRestantes != null && reserva.minutosRestantes! <= 0)) {
+      bg = Colors.red.shade50;
+      fg = Colors.red.shade800;
+      icon = Icons.timer_off_rounded;
+    } else if (reserva.minutosRestantes != null && reserva.minutosRestantes! <= 360) {
+      bg = Colors.red.shade100;
+      fg = Colors.red.shade900;
+      icon = Icons.alarm_rounded;
+    } else if (reserva.minutosRestantes != null && reserva.minutosRestantes! <= 1440) {
+      bg = Colors.amber.shade50;
+      fg = Colors.amber.shade900;
+      icon = Icons.hourglass_bottom_rounded;
+    } else {
+      bg = Colors.blue.shade50;
+      fg = Colors.blue.shade800;
+      icon = Icons.timer_rounded;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: fg.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: fg),
+          const SizedBox(width: 4),
+          Text(
+            reserva.tiempoRestanteTexto,
+            style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.bold),
+          ),
+        ],
       ),
     );
   }
@@ -327,9 +518,12 @@ class _EstadoBadge extends StatelessWidget {
 
     switch (estado.toUpperCase()) {
       case 'CONFIRMADA':
-      case 'COMPLETADA':
         bg = Colors.green.shade50;
         fg = Colors.green.shade800;
+        break;
+      case 'COMPLETADA':
+        bg = Colors.blue.shade50;
+        fg = Colors.blue.shade800;
         break;
       case 'CANCELADA':
         bg = Colors.red.shade50;

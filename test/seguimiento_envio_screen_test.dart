@@ -4,7 +4,7 @@ import 'package:si2_mobile/features/shipping/data/envio_tracking_model.dart';
 import 'package:si2_mobile/features/shipping/presentation/screens/seguimiento_envio_screen.dart';
 
 void main() {
-  group('CU18 - SeguimientoEnvioScreen Widget Tests', () {
+  group('SeguimientoEnvioScreen Widget Tests', () {
     testWidgets('SeguimientoEnvioScreen renders full shipment details with initialTracking',
         (WidgetTester tester) async {
       final mockTracking = EnvioTrackingModel(

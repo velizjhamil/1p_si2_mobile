@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:si2_mobile/features/notifications/data/notificacion_model.dart';
 
 void main() {
-  group('CU10 - NotificacionModel Unit Tests', () {
+  group('NotificacionModel Unit Tests', () {
     test('NotificacionModel.fromJson parses full payload correctly', () {
       final json = {
         'id_notificacion': 15,

@@ -12,7 +12,7 @@ void main() {
     CartService.instance.clear();
   });
 
-  group('CU15 - CartService and CartItem Unit Tests', () {
+  group('CartService and CartItem Unit Tests', () {
     test('CartItem creates and computes subtotal correctly', () {
       final item = CartItem(
         idProducto: 1,
@@ -106,14 +106,21 @@ void main() {
     });
   });
 
-  group('CU14 - ReservasService Models Unit Tests', () {
+  group('ReservasService Models Unit Tests', () {
     test('ReservaItem parses valid JSON with details and totals', () {
       final json = {
         'id_reserva': 12,
+        'id_sucursal': 3,
+        'sucursal_nombre': 'Sucursal Equipetrol',
         'fecha_reserva': '2026-09-14T12:00:00Z',
-        'fecha_expiracion': '2026-09-17T12:00:00Z',
+        'fecha_expiracion': '2026-09-16T12:00:00Z',
+        'fecha_expiracion_dt': '2026-09-16T12:00:00Z',
         'estado': 'PENDIENTE',
         'total_estimado': 250.0,
+        'monto_anticipo': 125.0,
+        'monto_anticipo_pagado': 0.0,
+        'minutos_restantes': 2880,
+        'es_expirada': false,
         'productos': [
           {
             'id_detalle': 1,
@@ -128,11 +135,41 @@ void main() {
       final reserva = ReservaItem.fromJson(json);
 
       expect(reserva.idReserva, equals(12));
+      expect(reserva.idSucursal, equals(3));
+      expect(reserva.sucursalNombre, equals('Sucursal Equipetrol'));
       expect(reserva.estado, equals('PENDIENTE'));
+      expect(reserva.esPendiente, isTrue);
       expect(reserva.totalEstimado, equals(250.0));
+      expect(reserva.montoAnticipo, equals(125.0));
+      expect(reserva.montoAnticipoPagado, equals(0.0));
+      expect(reserva.saldoPendiente, equals(250.0));
+      expect(reserva.esExpirada, isFalse);
+      expect(reserva.minutosRestantes, equals(2880));
+      expect(reserva.tiempoRestanteTexto, contains('restantes'));
       expect(reserva.productos.length, equals(1));
       expect(reserva.productos.first.nombre, equals('Vestido Seda'));
       expect(reserva.fechaExpiracion, isNotNull);
+    });
+
+    test('ReservaItem confirmed state calculates remaining balance properly', () {
+      final json = {
+        'id_reserva': 15,
+        'id_sucursal': 1,
+        'sucursal_nombre': 'Sucursal Central',
+        'estado': 'CONFIRMADA',
+        'total_estimado': 400.0,
+        'monto_anticipo': 200.0,
+        'monto_anticipo_pagado': 200.0,
+        'minutos_restantes': 120,
+        'es_expirada': false,
+      };
+
+      final reserva = ReservaItem.fromJson(json);
+
+      expect(reserva.esConfirmada, isTrue);
+      expect(reserva.montoAnticipoPagado, equals(200.0));
+      expect(reserva.saldoPendiente, equals(200.0));
+      expect(reserva.tiempoRestanteTexto, equals('2h restantes'));
     });
   });
 }

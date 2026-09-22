@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:si2_mobile/features/shipping/data/envio_tracking_model.dart';
 
 void main() {
-  group('CU18 - EnvioTrackingModel Unit Tests', () {
+  group('EnvioTrackingModel Unit Tests', () {
     test('EnvioTrackingModel.fromJson parses complete tracking payload', () {
       final json = {
         'codigo_rastreo': 'TRK-ATT-998877',

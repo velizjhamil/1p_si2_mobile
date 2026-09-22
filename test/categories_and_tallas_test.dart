@@ -3,7 +3,7 @@ import 'package:si2_mobile/features/categories/data/categorias_service.dart';
 import 'package:si2_mobile/features/tallas/data/tallas_service.dart';
 
 void main() {
-  group('CU9 - Categorias Unit Tests', () {
+  group('Categorias Unit Tests', () {
     test('Categoria.fromJson parses valid JSON with all fields', () {
       final json = {
         'id_categoria': 1,
@@ -42,7 +42,7 @@ void main() {
     });
   });
 
-  group('CU7 - Tallas y Colores Unit Tests', () {
+  group('Tallas y Colores Unit Tests', () {
     test('Talla.fromJson parses valid JSON correctly', () {
       final json = {
         'id_talla': 3,

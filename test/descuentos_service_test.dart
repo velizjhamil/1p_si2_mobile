@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:si2_mobile/features/promotions/data/descuento_model.dart';
 
 void main() {
-  group('CU12 - DescuentoModel Unit Tests', () {
+  group('DescuentoModel Unit Tests', () {
     test('DescuentoModel.fromJson parses percentage discount correctly', () {
       final json = {
         'id_descuento': 1,

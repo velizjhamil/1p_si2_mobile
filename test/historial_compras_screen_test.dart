@@ -5,7 +5,7 @@ import 'package:si2_mobile/features/orders/presentation/screens/detalle_compra_s
 import 'package:si2_mobile/features/orders/presentation/screens/historial_compras_screen.dart';
 
 void main() {
-  group('CU11 - HistorialComprasScreen and DetalleCompraScreen Widget Tests', () {
+  group('HistorialComprasScreen and DetalleCompraScreen Widget Tests', () {
     testWidgets('DetalleCompraScreen renders complete order information and products',
         (WidgetTester tester) async {
       const mockCompra = CompraClienteModel(

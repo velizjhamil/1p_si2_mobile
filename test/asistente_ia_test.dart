@@ -7,7 +7,7 @@ import 'package:si2_mobile/features/ai_assistant/presentation/widgets/rich_markd
 import 'package:si2_mobile/features/ai_assistant/presentation/widgets/typing_indicator.dart';
 
 void main() {
-  group('CU25 - Asistente IA Models & Data Tests', () {
+  group('Asistente IA Models & Data Tests', () {
     test('ProductoResumenIA.fromJson correctly parses enriched payload', () {
       final json = {
         'id_producto': 4,
@@ -85,7 +85,7 @@ void main() {
     });
   });
 
-  group('CU25 - Asistente IA UI Widgets Tests', () {
+  group('Asistente IA UI Widgets Tests', () {
     testWidgets('RichMarkdownText renders headers, bullets and bold text', (tester) async {
       const markdown = '''
 ### Prendas Disponibles

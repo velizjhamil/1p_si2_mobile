@@ -4,7 +4,7 @@ import 'package:si2_mobile/features/promotions/data/descuento_model.dart';
 import 'package:si2_mobile/features/promotions/presentation/screens/promociones_screen.dart';
 
 void main() {
-  group('CU12 - PromocionesScreen Widget Tests', () {
+  group('PromocionesScreen Widget Tests', () {
     testWidgets('PromocionesScreen renders title, hero header, and action buttons',
         (WidgetTester tester) async {
       await tester.pumpWidget(

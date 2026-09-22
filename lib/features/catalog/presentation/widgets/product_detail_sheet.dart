@@ -3,15 +3,23 @@ import 'package:flutter/material.dart';
 import '../../../ar_tryon/presentation/screens/probador_virtual_screen.dart';
 import '../../../cart/logic/cart_service.dart';
 import '../../../cart/presentation/screens/cart_screen.dart';
+import '../../../promotions/data/descuento_model.dart';
 import '../../../reservations/presentation/widgets/crear_reserva_dialog.dart';
 import '../../data/productos_service.dart';
 
 /// Interactive client-oriented bottom sheet for garment inspection,
-/// size/color selection, adding to cart, or reserving in store.
+/// size/color selection, promotional pricing, branch stock inspection, and reserving.
 class ProductDetailSheet extends StatefulWidget {
-  const ProductDetailSheet({super.key, required this.producto});
+  const ProductDetailSheet({
+    super.key,
+    required this.producto,
+    this.descuento,
+    this.idSucursalSeleccionada,
+  });
 
   final Producto producto;
+  final DescuentoModel? descuento;
+  final int? idSucursalSeleccionada;
 
   @override
   State<ProductDetailSheet> createState() => _ProductDetailSheetState();
@@ -21,6 +29,21 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   String? _tallaSeleccionada;
   String? _colorSeleccionado;
   int _cantidad = 1;
+  bool _isAdding = false;
+
+  double get _precioFinal {
+    final desc = widget.descuento;
+    if (desc != null && desc.activo) {
+      if (desc.esPorcentaje) {
+        return (widget.producto.precioVenta * (1.0 - (desc.valor / 100.0)))
+            .clamp(0.0, double.infinity);
+      } else {
+        return (widget.producto.precioVenta - desc.valor)
+            .clamp(0.0, double.infinity);
+      }
+    }
+    return widget.producto.precioVenta;
+  }
 
   @override
   void initState() {
@@ -33,8 +56,6 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     }
   }
 
-  bool _isAdding = false;
-
   Future<void> _agregarAlCarrito() async {
     if (_isAdding) return;
 
@@ -44,7 +65,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       CartService.instance.addItem(
         idProducto: widget.producto.idProducto,
         nombre: widget.producto.nombre,
-        precioUnitario: widget.producto.precioVenta,
+        precioUnitario: _precioFinal,
         cantidad: _cantidad,
         talla: _tallaSeleccionada,
         color: _colorSeleccionado,
@@ -57,7 +78,6 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       // Close the bottom sheet modal cleanly
       navigator.pop();
 
-      // Clear any previous or stacked snackbars to prevent persistent blocking
       messenger.clearSnackBars();
       messenger.showSnackBar(
         SnackBar(
@@ -100,9 +120,11 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       builder: (_) => CrearReservaDialog(
         idProducto: widget.producto.idProducto,
         nombreProducto: widget.producto.nombre,
-        precioUnitario: widget.producto.precioVenta,
+        precioUnitario: _precioFinal,
         talla: _tallaSeleccionada,
         color: _colorSeleccionado,
+        idSucursalInicial: widget.idSucursalSeleccionada,
+        disponibilidadSucursales: widget.producto.disponibilidadSucursales,
       ),
     );
   }
@@ -115,6 +137,8 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     final hasImage = widget.producto.imagenUrl != null &&
         widget.producto.imagenUrl!.isNotEmpty &&
         widget.producto.imagenUrl!.startsWith('http');
+
+    final tieneDescuento = widget.descuento != null && _precioFinal < widget.producto.precioVenta;
 
     return Container(
       decoration: BoxDecoration(
@@ -150,43 +174,113 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               child: Container(
                 height: 200,
                 color: colorScheme.primaryContainer.withValues(alpha: 0.25),
-                child: hasImage
-                    ? Image.network(
-                        widget.producto.imagenUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const Icon(
-                          Icons.checkroom_rounded,
-                          size: 64,
-                          color: Colors.grey,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    hasImage
+                        ? Image.network(
+                            widget.producto.imagenUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => const Icon(
+                              Icons.checkroom_rounded,
+                              size: 64,
+                              color: Colors.grey,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.checkroom_rounded,
+                            size: 64,
+                            color: Colors.grey,
+                          ),
+                    if (tieneDescuento)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade700,
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withAlpha(40),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            widget.descuento!.badgeTexto,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
-                      )
-                    : const Icon(
-                        Icons.checkroom_rounded,
-                        size: 64,
-                        color: Colors.grey,
                       ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 16),
 
-            // Name & Price
+            // Name & Price (with promo discount)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: Text(
-                    widget.producto.nombre,
-                    style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.producto.nombre,
+                        style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      if (tieneDescuento) ...[
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.red.shade200),
+                          ),
+                          child: Text(
+                            '🔥 Oferta activa: ${widget.descuento!.nombre}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                Text(
-                  'Bs ${widget.producto.precioVenta.toStringAsFixed(2)}',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.primary,
-                  ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Bs ${_precioFinal.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                    if (tieneDescuento)
+                      Text(
+                        'Bs ${widget.producto.precioVenta.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          decoration: TextDecoration.lineThrough,
+                          color: colorScheme.outline,
+                          fontSize: 13,
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),
@@ -250,6 +344,87 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               const SizedBox(height: 14),
             ],
 
+            // Disponibilidad por Sucursal en tiempo real
+            if (widget.producto.disponibilidadSucursales.isNotEmpty) ...[
+              Text(
+                'Disponibilidad en Tiendas / Sucursales:',
+                style: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              ...widget.producto.disponibilidadSucursales.map((suc) {
+                final isLowStock = suc.stock > 0 && suc.stock <= 5;
+                final isOutOfStock = suc.stock <= 0;
+                final isSelectedBranch = widget.idSucursalSeleccionada == suc.idSucursal;
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isOutOfStock
+                        ? Colors.grey.shade100
+                        : (isSelectedBranch
+                            ? colorScheme.primaryContainer.withValues(alpha: 0.3)
+                            : (isLowStock ? Colors.amber.shade50 : Colors.green.shade50)),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isOutOfStock
+                          ? Colors.grey.shade300
+                          : (isSelectedBranch
+                              ? colorScheme.primary
+                              : (isLowStock ? Colors.amber.shade300 : Colors.green.shade200)),
+                      width: isSelectedBranch ? 2 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isOutOfStock
+                            ? Icons.store_outlined
+                            : (isLowStock ? Icons.warning_amber_rounded : Icons.store_rounded),
+                        size: 18,
+                        color: isOutOfStock
+                            ? Colors.grey.shade600
+                            : (isLowStock ? Colors.amber.shade800 : Colors.green.shade700),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          suc.nombreSucursal + (suc.ciudad != null ? ' (${suc.ciudad})' : ''),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: isOutOfStock ? Colors.grey.shade700 : Colors.black87,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isOutOfStock
+                              ? Colors.grey.shade300
+                              : (isLowStock ? Colors.amber.shade200 : Colors.green.shade200),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          isOutOfStock
+                              ? 'Agotado'
+                              : (isLowStock ? '¡Últimas ${suc.stock} unids!' : '${suc.stock} disponibles'),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: isOutOfStock
+                                ? Colors.grey.shade800
+                                : (isLowStock ? Colors.amber.shade900 : Colors.green.shade900),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 12),
+            ],
+
             // Quantity Stepper
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -270,6 +445,8 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+
             // Try in Virtual Fitting Room Button
             OutlinedButton.icon(
               onPressed: () {
@@ -292,13 +469,13 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               ),
               icon: const Icon(Icons.auto_awesome_rounded),
               label: const Text(
-                'Probar en Probador Virtual IA (CU25)',
+                'Probar en Probador Virtual IA',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
             const SizedBox(height: 12),
 
-            // Action Buttons
+            // Action Buttons (Reservar + Añadir al Carrito)
             Row(
               children: [
                 Expanded(
@@ -309,7 +486,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     icon: const Icon(Icons.bookmark_border_rounded),
-                    label: const Text('Reservar'),
+                    label: const Text('Reservar Prenda'),
                   ),
                 ),
                 const SizedBox(width: 12),

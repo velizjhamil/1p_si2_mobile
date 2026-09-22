@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:si2_mobile/features/orders/data/compra_service.dart';
 
 void main() {
-  group('CU21 & CU13 - CompraService Models Unit Tests', () {
+  group('CompraService Models Unit Tests', () {
     test('VentaModel.fromJson parses full sale payload with items and delivery', () {
       final json = {
         'id_venta': 15,

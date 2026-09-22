@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:si2_mobile/features/notifications/presentation/screens/notificaciones_screen.dart';
 
 void main() {
-  group('CU10 - NotificacionesScreen Widget Tests', () {
+  group('NotificacionesScreen Widget Tests', () {
     testWidgets('NotificacionesScreen renders title, filter chips, and action buttons',
         (WidgetTester tester) async {
       await tester.pumpWidget(

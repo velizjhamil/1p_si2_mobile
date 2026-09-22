@@ -3,7 +3,7 @@ import 'package:si2_mobile/features/ar_tryon/data/probador_virtual_service.dart'
 import 'package:si2_mobile/features/cart/logic/cart_service.dart';
 
 void main() {
-  group('CU25 & CU8 - Probador Virtual con IA Models & Flow Tests', () {
+  group('Probador Virtual con IA Models & Flow Tests', () {
     test('FotoUsuario.fromJson parses valid payload and dates', () {
       final json = {
         'id_foto': 101,
